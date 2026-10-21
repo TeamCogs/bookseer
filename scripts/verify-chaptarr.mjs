@@ -132,11 +132,23 @@ const rawBooks = await api('/book?include=author');
 const monitoredBooks = rawBooks.filter(
   (book) => book.monitored || book.ebookMonitored || book.audiobookMonitored,
 );
+console.log(
+  'Fixture monitoring:',
+  JSON.stringify(
+    authors.map((author) => ({
+      ebookMonitored: author.ebookMonitored,
+      audiobookMonitored: author.audiobookMonitored,
+      ebookMonitorNewItems: author.ebookMonitorNewItems,
+      audiobookMonitorNewItems: author.audiobookMonitorNewItems,
+    })),
+  ),
+);
 assert.ok(
   authors.every(
     (a) =>
       a.ebookMonitorNewItems === 'none' &&
-      a.audiobookMonitorNewItems === 'none' &&
+      a.audiobookMonitored !== true &&
+      (a.audiobookMonitorNewItems == null || a.audiobookMonitorNewItems === 'none') &&
       a.ebookMonitorExistingMode !== 'all' &&
       a.audiobookMonitorExistingMode !== 'all',
   ),
