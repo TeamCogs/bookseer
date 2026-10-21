@@ -149,40 +149,48 @@ export class Chaptarr {
       await this.json(`/book/lookup?term=${encodeURIComponent(lookupTerm)}&mediaType=${kind}`),
     );
     if (!found.length) {
-      let search: Record<string, any>[];
-      try {
-        search = array(
-          await this.json(`/search?term=${encodeURIComponent(book.title)}&provider=hardcover`),
-        );
-      } catch {
-        throw new IntegrationError(
-          'Chaptarr could not resolve the work through its native search provider. Configure its Hardcover provider and API token, then retry.',
-        );
-      }
-      const previews = search
-        .map((r) => r.book)
-        .filter(
-          (b: any) =>
-            b &&
-            normalizeText(b.title || '') === normalizeText(book.title) &&
-            normalizeAuthor(b.author?.authorName || '') === normalizeAuthor(book.author),
-        );
-      const ids = [
-        ...new Set<string>(
-          previews
-            .map((b: any) => b.foreignBookId)
-            .filter(
-              (id: unknown): id is string => typeof id === 'string' && /^(hc|ol|gr):/.test(id),
-            ),
-        ),
-      ];
-      if (ids.length > 1)
-        throw new IntegrationError(
-          'Chaptarr search returned multiple matching works. Review the identity in Chaptarr before requesting it.',
-        );
-      if (ids.length === 1)
-        found = array(
+      let searched = false;
+      for (const provider of ['goodreads', 'hardcover']) {
+        let search: Record<string, any>[];
+        try {
+          search = array(
+            await this.json(`/search?term=${encodeURIComponent(book.title)}&provider=${provider}`),
+          );
+          searched = true;
+        } catch {
+          continue;
+        }
+        const previews = search
+          .map((r) => r.book)
+          .filter(
+            (candidate: any) =>
+              candidate &&
+              normalizeText(candidate.title || '') === normalizeText(book.title) &&
+              normalizeAuthor(candidate.author?.authorName || '') ===
+                normalizeAuthor(book.author) &&
+              /^(hc|ol|gr):/.test(candidate.foreignBookId || '') &&
+              /^(hc|ol|gr):/.test(candidate.author?.foreignAuthorId || ''),
+          );
+        const ids = [...new Set<string>(previews.map((candidate: any) => candidate.foreignBookId))];
+        if (ids.length > 1)
+          throw new IntegrationError(
+            'Chaptarr search returned multiple matching works. Review the identity in Chaptarr before requesting it.',
+          );
+        if (ids.length !== 1) continue;
+        const resolved = array(
           await this.json(`/book/lookup?term=${encodeURIComponent(ids[0])}&mediaType=${kind}`),
+        );
+        // Native search returns a provider-owned work and author identity. Chaptarr's add
+        // pipeline can accept that preview and prepare full metadata asynchronously.
+        // Its legacy text lookup filters ebook previews out before mapping the response.
+        found = resolved.length
+          ? resolved
+          : [previews.find((candidate: any) => candidate.foreignBookId === ids[0])!];
+        break;
+      }
+      if (!searched)
+        throw new IntegrationError(
+          'Chaptarr native search providers could not be reached. Check its provider settings and network, then retry.',
         );
     }
     if (!found.length)

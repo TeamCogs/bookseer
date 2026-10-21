@@ -64,7 +64,12 @@ assert.deepEqual(await adapter.inventory(), []);
 let found = [];
 for (let attempt = 0; attempt < 8; attempt++) {
   found = await api('/book/lookup?term=ol%3AOL450063W&mediaType=ebook');
-  if (!found.length) found = await api('/book/lookup?term=Frankenstein&mediaType=ebook');
+  if (!found.length) {
+    // Legacy text lookup uses audiobook previews; an ebook filter removes them.
+    // The Bookseer adapter resolves the provider identity and scopes the actual add.
+    const search = await api('/search?term=Frankenstein&provider=goodreads');
+    found = search.map((entry) => entry.book).filter(Boolean);
+  }
   if (Array.isArray(found) && found.length) break;
   if (attempt < 7) await new Promise((resolve) => setTimeout(resolve, 15000));
 }

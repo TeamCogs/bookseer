@@ -387,7 +387,7 @@ test('metadata warmup retries only lookups with persistent backoff and never sen
     await services.dispatch(request.id);
     assert.equal(store.request(request.id)?.status, 'pending_metadata');
     await services.dispatch(request.id);
-    assert.equal(calls, 2);
+    assert.equal(calls, 3);
     assert.ok(store.setting(`lookup_retry:${request.id}`));
   } finally {
     store.close();
@@ -516,10 +516,15 @@ test('Chaptarr native Hardcover search resolves one matching work before a forma
     calls.push(url.pathname + url.search);
     assert.equal(init.method, 'GET');
     if (url.pathname.endsWith('/search')) {
+      if (url.searchParams.get('provider') === 'goodreads') return json([]);
       assert.equal(url.searchParams.get('provider'), 'hardcover');
       return json([
         {
-          book: { title: book.title, author: { authorName: book.author }, foreignBookId: 'hc:321' },
+          book: {
+            title: book.title,
+            author: { authorName: book.author, foreignAuthorId: 'hc:123' },
+            foreignBookId: 'hc:321',
+          },
         },
       ]);
     }
@@ -531,7 +536,49 @@ test('Chaptarr native Hardcover search resolves one matching work before a forma
     );
   });
   assert.equal((await new Chaptarr(c).lookup(book, 'ebook')).foreignBookId, 'hc:321');
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
+});
+
+test('native Goodreads previews can prepare an ebook asynchronously without a Hardcover account or an unscoped add', async (t) => {
+  const c = config().connections;
+  Object.assign(c, {
+    chaptarrUrl: 'http://chaptarr.test',
+    chaptarrApiKey: 'key',
+    ebookRootFolder: '/ebooks',
+    ebookQualityProfileId: 1,
+    ebookMetadataProfileId: 1,
+  });
+  let adds = 0;
+  t.mock.method(globalThis, 'fetch', async (input: string, init: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith('/lookup')) {
+      assert.equal(url.searchParams.get('mediaType'), 'ebook');
+      return json([]);
+    }
+    if (url.pathname.endsWith('/search')) {
+      assert.equal(url.searchParams.get('provider'), 'goodreads');
+      return json([
+        {
+          book: {
+            title: book.title,
+            foreignBookId: 'gr:321',
+            author: { authorName: book.author, foreignAuthorId: 'gr:123' },
+            localEbookBooks: [],
+          },
+        },
+      ]);
+    }
+    assert.ok(url.pathname.endsWith('/book'));
+    assert.equal(url.searchParams.get('mediaType'), 'ebook');
+    assert.equal(JSON.parse(String(init.body)).foreignBookId, 'gr:321');
+    adds++;
+    return json({ pendingId: 2 }, 202);
+  });
+  await assert.rejects(
+    new Chaptarr(c).submit(book, 'ebook', () => {}),
+    /accepted the addition for background processing/,
+  );
+  assert.equal(adds, 1);
 });
 
 test('Chaptarr cover proxy authenticates only local cover resources and rejects external image URLs', async (t) => {

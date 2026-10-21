@@ -63,7 +63,7 @@ Configure a dedicated account with access to the intended libraries and covers. 
 
 Configure its internal URL and API key, then a root folder, quality profile, and metadata profile for each requested format. Zero profile IDs leave that format's acquisition disabled. Configure indexers, download clients, routing, permissions, and imports in Chaptarr itself. Bookseer does not install a fork or duplicate acquisition logic. Test one permitted book request before granting automatic approval to readers.
 
-Current official Chaptarr uses its configured Hardcover provider for native discovery. Enable that provider and supply its API token **in Chaptarr** before requesting new works. Bookseer first tries a canonical work lookup, then Chaptarr's native Hardcover search when needed; it does not accept an unrelated title or silently add an unresolved work. A fresh Chaptarr container without a working metadata provider cannot complete this flow. Bookseer's Connections test confirms API access and available profiles, so also verify a real title search in Chaptarr during setup.
+Bookseer first tries a canonical work lookup, then Chaptarr's native Goodreads search and its configured Hardcover search when needed. Native search must resolve one matching title and author with provider-owned identities; unrelated or ambiguous results are blocked. Hardcover is optional and requires its provider and API token configured **in Chaptarr**. A validated native preview can enter Chaptarr's asynchronous metadata-preparation pipeline; Bookseer follows the accepted operation without repeating the add. Bookseer's Connections test confirms API access and available profiles, so also verify a real title search in Chaptarr during setup.
 
 ## Update and rollback
 

@@ -335,8 +335,9 @@ export function ConnectionsPage({
               downloads, and imports in Chaptarr.
             </p>
             <p className="small muted">
-              Enable Chaptarr’s Hardcover provider and set its API token there for new-title search.
-              Check a real title in Chaptarr before enabling automatic requests.
+              Bookseer uses Chaptarr’s native Goodreads search, with Hardcover as an optional
+              fallback. Configure a Hardcover token in Chaptarr if you use that provider. Check a
+              real title in Chaptarr before enabling automatic requests.
             </p>
           </div>
           <div className="button-row">
