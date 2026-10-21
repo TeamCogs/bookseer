@@ -1,6 +1,7 @@
 services:
   bookseer:
-    image: bookseer:local
+    image: ghcr.io/teamcogs/bookseer:${BOOKSEER_IMAGE_TAG:-latest}
+    pull_policy: missing
     build:
       context: .
     init: true

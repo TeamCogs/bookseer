@@ -28,7 +28,9 @@ type Page =
   'discover' | 'library' | 'requests' | 'notifications' | 'connections' | 'users' | 'account';
 const labels: Record<BookRequest['status'], string> = {
   pending_approval: 'Awaiting approval',
-  pending_setup: 'Approved · setup needed',
+  pending_setup: 'Approved · waiting',
+  pending_metadata: 'Waiting for metadata',
+  checking: 'Checking libraries',
   submitting: 'Sending request',
   requested: 'Requested',
   downloading: 'Downloading',
@@ -839,14 +841,14 @@ function RequestsPage({
               </div>
               <div className="request-actions">
                 {user.role === 'admin' &&
-                ['pending_approval', 'pending_setup'].includes(r.status) ? (
+                ['pending_approval', 'pending_setup', 'pending_metadata'].includes(r.status) ? (
                   <>
                     <button
                       className="button primary small-button"
                       disabled={busy === r.id}
                       onClick={() => void action(r.id, 'approve')}
                     >
-                      {r.status === 'pending_setup' ? 'Try acquisition' : 'Approve'}
+                      {r.status === 'pending_approval' ? 'Approve' : 'Try acquisition'}
                     </button>
                     <button
                       className="text-button danger-text"
@@ -857,7 +859,9 @@ function RequestsPage({
                     </button>
                   </>
                 ) : null}
-                {['pending_approval', 'pending_setup'].includes(r.status) &&
+                {['pending_approval', 'pending_setup', 'pending_metadata', 'checking'].includes(
+                  r.status,
+                ) &&
                 (user.id === r.requesterId || user.role === 'admin') ? (
                   <button
                     className="text-button"

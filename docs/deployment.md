@@ -21,13 +21,13 @@ openssl rand -hex 32
 Put the first generated value in `BOOKSEER_ADMIN_PASSWORD` and the second in `BOOKSEER_SESSION_SECRET`. Keep `.env` private. Start the application:
 
 ```sh
-docker compose up -d --build
+docker compose up -d
 docker compose ps
 ```
 
 Open `http://YOUR-NAS-ADDRESS:5057`. Sign in as `admin` with the password from your environment file. **Users → Add user** creates household reader accounts. **Connections** configures your existing BookOrbit and official Chaptarr servers. The administrator environment password bootstraps an empty database; changing that value does not reset an existing account. Use the account interface or administrator reset controls to change existing passwords.
 
-The default Compose file builds from source and needs no container-registry login. The image override in `deploy/compose.image.yaml` is available for maintainers who publish the container to GHCR; do not assume a tag is public or tested before checking its workflow and package page.
+The default Compose file pulls the public multi-platform image without a container-registry login. Anonymous pulls and both CPU architectures have been verified. Set `BOOKSEER_IMAGE_TAG=sha-COMMIT` for a published revision tag, or use `docker compose up -d --build` to build the checked-out source. Check the workflow for the revision being deployed.
 
 ## Networking
 
@@ -44,14 +44,14 @@ Port `5057` is published on the NAS's interfaces by default. Set `BOOKSEER_BIND_
 
 ## NAS platforms
 
-| Platform                 | Installation approach                                                                                                                               |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Synology                 | Container Manager project using the repository folder and Compose file; keep the named data volume on local storage.                                |
-| QNAP                     | Container Station application/Compose import, with the same environment variables and local persistent volume.                                      |
-| TrueNAS                  | A release that supports Docker Compose/custom containers; use local dataset storage for `/data` and map port 5057.                                  |
-| Unraid                   | Docker Compose Manager, or build the image then create a container with the listed variables and `/data` volume.                                    |
-| Portainer                | Deploy from this Git repository with the private variables supplied in the stack environment; enable building, or use an available published image. |
-| UGREEN, Linux, other NAS | Standard Docker Compose. No vendor-specific paths or APIs are required.                                                                             |
+| Platform                 | Installation approach                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Synology                 | Container Manager project using the repository folder and Compose file; keep the named data volume on local storage.                 |
+| QNAP                     | Container Station application/Compose import, with the same environment variables and local persistent volume.                       |
+| TrueNAS                  | A release that supports Docker Compose/custom containers; use local dataset storage for `/data` and map port 5057.                   |
+| Unraid                   | Docker Compose Manager, or build the image then create a container with the listed variables and `/data` volume.                     |
+| Portainer                | Use `deploy/portainer-compose.yaml` in the standalone Docker stack editor and supply the private variables in the stack environment. |
+| UGREEN, Linux, other NAS | Standard Docker Compose. No vendor-specific paths or APIs are required.                                                              |
 
 The container runs as UID/GID `1000:1000`. The default named volume initializes with appropriate ownership. For a bind mount, create a dedicated app-data directory owned by the configured container user. An optional Compose `user: "UID:GID"` override works with this image if that user can write `/data`. Bookseer does not interpret `PUID` or `PGID` variables. Do not make app data world-writable to work around permissions.
 

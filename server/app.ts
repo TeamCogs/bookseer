@@ -80,6 +80,10 @@ export async function buildApp(
     bodyLimit: 32768,
     trustProxy: false,
   });
+  app.addHook('onClose', async () => {
+    services.cancel();
+    await services.drain();
+  });
   app.decorateRequest('auth', null);
   await app.register(cookie);
   await app.register(helmet, {
@@ -482,7 +486,7 @@ export async function buildApp(
           error instanceof Error ? error.message : 'Request could not be saved.',
         );
       }
-      if (created.created) await services.dispatch(created.id);
+      if (created.created) services.enqueue(created.id);
       reply.code(created.created ? 201 : 200);
       return {
         request: store.requestsFor(req.auth!.user).find((r) => r.id === created.id),
@@ -500,14 +504,17 @@ export async function buildApp(
       const action = req.params.action;
       if (action === 'approve') {
         admin(req);
-        if (!['pending_approval', 'pending_setup'].includes(String(record.status)))
+        if (
+          !['pending_approval', 'pending_setup', 'pending_metadata'].includes(String(record.status))
+        )
           throw new AppError(409, 'Only pending requests can be approved.');
         store.updateRequest(
           String(record.id),
           'pending_setup',
           'Approved. Waiting for acquisition.',
         );
-        await services.dispatch(String(record.id));
+        store.setSetting(`lookup_retry:${record.id}`, '');
+        services.enqueue(String(record.id));
       } else if (action === 'retry') {
         admin(req);
         if (!['needs_review', 'failed', 'cancelled', 'rejected'].includes(String(record.status)))
@@ -517,12 +524,17 @@ export async function buildApp(
           'pending_setup',
           'Administrator reviewed the upstream state and reopened the request.',
         );
-        await services.dispatch(String(record.id));
+        store.setSetting(`lookup_retry:${record.id}`, '');
+        services.enqueue(String(record.id));
       } else if (action === 'reject' || action === 'cancel') {
         if (action === 'reject') admin(req);
         else if (actor.role !== 'admin' && record.requester_id !== actor.id)
           throw new AppError(403, 'You cannot cancel another user’s request.');
-        if (!['pending_approval', 'pending_setup'].includes(String(record.status)))
+        if (
+          !['pending_approval', 'pending_setup', 'pending_metadata', 'checking'].includes(
+            String(record.status),
+          )
+        )
           throw new AppError(
             409,
             'This request has already progressed. Manage active downloads in Chaptarr.',

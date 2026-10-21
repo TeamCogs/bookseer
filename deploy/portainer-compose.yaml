@@ -1,0 +1,25 @@
+# Portainer: add a stack on a standalone Docker endpoint.
+# Supply the two required private values in the stack's environment form.
+services:
+  bookseer:
+    image: ghcr.io/teamcogs/bookseer:${BOOKSEER_IMAGE_TAG:-latest}
+    init: true
+    restart: unless-stopped
+    environment:
+      BOOKSEER_ADMIN_USERNAME: ${BOOKSEER_ADMIN_USERNAME:-admin}
+      BOOKSEER_ADMIN_PASSWORD: ${BOOKSEER_ADMIN_PASSWORD:?Set a private admin password}
+      BOOKSEER_SESSION_SECRET: ${BOOKSEER_SESSION_SECRET:?Set a private encryption key}
+      BOOKSEER_PUBLIC_URL: ${BOOKSEER_PUBLIC_URL:-}
+      BOOKSEER_SECURE_COOKIES: ${BOOKSEER_SECURE_COOKIES:-false}
+    ports:
+      - '${BOOKSEER_PORT:-5057}:5057'
+    volumes:
+      - bookseer_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 45s
+volumes:
+  bookseer_data:

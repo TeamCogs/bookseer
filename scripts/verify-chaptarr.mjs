@@ -61,7 +61,13 @@ const c = loadConfig({
 }).connections;
 const adapter = new Chaptarr(c);
 assert.deepEqual(await adapter.inventory(), []);
-const found = await api('/book/lookup?term=ol%3AOL450063W&mediaType=ebook');
+let found = [];
+for (let attempt = 0; attempt < 8; attempt++) {
+  found = await api('/book/lookup?term=ol%3AOL450063W&mediaType=ebook');
+  if (!found.length) found = await api('/book/lookup?term=Frankenstein&mediaType=ebook');
+  if (Array.isArray(found) && found.length) break;
+  if (attempt < 7) await new Promise((resolve) => setTimeout(resolve, 15000));
+}
 assert.ok(
   Array.isArray(found) && found.length,
   'Upstream metadata must return the public-domain test work.',

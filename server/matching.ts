@@ -114,6 +114,12 @@ function part(value: string): string {
   };
   return `${match[1] === 'part' ? 'part' : 'volume'}:${aliases[match[2]] || match[2]}`;
 }
+export function compatibleExtent(a: string, b: string): boolean {
+  const collection = /\b(collection|omnibus|boxed set|box set|complete works|books \d+ \d+)\b/;
+  return (
+    part(a) === part(b) && collection.test(normalizeText(a)) === collection.test(normalizeText(b))
+  );
+}
 const normalizedItems = new WeakMap<
   LibraryItem,
   { title: string; author: string; extent: string; collection: boolean }
@@ -206,6 +212,19 @@ export function matchAvailability(
       stale: false,
       confirmed,
     };
+  const configured = states.filter((s) => s.configured);
+  const complete = configured.length > 0 && configured.every((s) => sourceIsFresh(s, maxAgeHours));
+  if (matched.length && !available.length && complete)
+    return {
+      status: 'not_found',
+      label: 'Tracked · file missing',
+      reason:
+        'Matching records have no available file in the complete, recently synced inventories. Acquisition can reuse an existing Chaptarr record.',
+      items: matched,
+      candidates: [],
+      stale: false,
+      confirmed,
+    };
   if (matched.length || confirmed)
     return {
       status: 'unknown',
@@ -229,8 +248,6 @@ export function matchAvailability(
       stale: false,
       confirmed: false,
     };
-  const configured = states.filter((s) => s.configured);
-  const complete = configured.length > 0 && configured.every((s) => sourceIsFresh(s, maxAgeHours));
   return {
     status: complete ? 'not_found' : 'unknown',
     label: complete ? 'Not found in library' : 'Availability unknown',

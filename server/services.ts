@@ -2,7 +2,7 @@ import type { MediaKind, Source, User } from '../shared/types.js';
 import type { Config, ConnectionConfig } from './config.js';
 import type { Store } from './store.js';
 import { BookOrbit } from './integrations/bookorbit.js';
-import { Chaptarr } from './integrations/chaptarr.js';
+import { Chaptarr, LookupPendingError } from './integrations/chaptarr.js';
 import { OpenLibrary } from './integrations/openlibrary.js';
 import { bookResult } from './matching.js';
 import { decrypt, encrypt } from './security.js';
@@ -14,6 +14,20 @@ export class Services {
   connections: ConnectionConfig;
   private syncing = new Map<Source, Promise<void>>();
   private dispatching = new Set<string>();
+  private submissions = new Set<Promise<void>>();
+  enqueue(id: string) {
+    if (this.stopping) return;
+    const task = this.dispatch(id);
+    this.submissions.add(task);
+    void task
+      .catch(() => {
+        /* The persisted request is recovered on restart if the store itself fails. */
+      })
+      .finally(() => this.submissions.delete(task));
+  }
+  async drain() {
+    await Promise.allSettled([...this.submissions]);
+  }
   private stopping = false;
   private lastRequestInventoryCheck = 0;
   cancel() {
@@ -47,6 +61,11 @@ export class Services {
     store.db
       .prepare(
         "UPDATE requests SET status='needs_review', message='The server restarted during submission. Verify Chaptarr before retrying.', updated_at=? WHERE status='submitting'",
+      )
+      .run(new Date().toISOString());
+    store.db
+      .prepare(
+        "UPDATE requests SET status='pending_setup',message='Library verification was interrupted. Waiting to recheck.',updated_at=? WHERE status='checking'",
       )
       .run(new Date().toISOString());
   }
@@ -118,7 +137,13 @@ export class Services {
   async dispatch(id: string): Promise<void> {
     if (this.stopping || this.dispatching.has(id) || this.config.demo) return;
     const request = this.store.request(id);
-    if (!request || request.status !== 'pending_setup') return;
+    if (!request || !['pending_setup', 'pending_metadata'].includes(String(request.status))) return;
+    const retryKey = `lookup_retry:${id}`;
+    const savedRetry = this.store.setting(retryKey);
+    const retry = savedRetry
+      ? (JSON.parse(savedRetry) as { attempts: number; after: number })
+      : { attempts: 0, after: 0 };
+    if (retry.after > Date.now()) return;
     const book = this.store.book(String(request.catalog_id));
     const kind = request.media_kind as MediaKind;
     if (!book) return;
@@ -133,7 +158,16 @@ export class Services {
       return;
     }
     if (availability.status !== 'not_found') {
-      this.store.updateRequest(id, 'needs_review', availability.reason);
+      const waiting =
+        availability.status === 'unknown' &&
+        (!availability.confirmed || availability.items.length > 0);
+      this.store.updateRequest(
+        id,
+        waiting ? 'pending_setup' : 'needs_review',
+        waiting
+          ? 'Waiting for complete, fresh library verification before acquisition.'
+          : availability.reason,
+      );
       return;
     }
     if (!this.chaptarr.ready(kind)) {
@@ -146,22 +180,59 @@ export class Services {
     }
     const reserved = this.store.db
       .prepare(
-        "UPDATE requests SET status='submitting',updated_at=? WHERE id=? AND status='pending_setup'",
+        "UPDATE requests SET status='checking',message='Resolving metadata and checking connected inventories.',updated_at=? WHERE id=? AND status IN ('pending_setup','pending_metadata')",
       )
       .run(new Date().toISOString(), id);
     if (!reserved.changes) return;
     this.dispatching.add(id);
     try {
-      const result = await this.chaptarr.submit(book, kind, () => {
-        if (this.stopping) throw new Error('Submission interrupted by server shutdown.');
-        const current = bookResult(book, this.store, this.config.inventoryMaxAgeHours).availability[
-          kind
-        ];
-        if (current.status !== 'not_found')
-          throw new Error(
-            'Library availability changed during submission. Review before continuing.',
-          );
-      });
+      const resolved = await this.chaptarr.lookup(book, kind);
+      await Promise.all([this.sync('bookorbit'), this.sync('chaptarr')]);
+      if (this.stopping || this.store.request(id)?.status !== 'checking') return;
+      const checked = bookResult(book, this.store, this.config.inventoryMaxAgeHours).availability[
+        kind
+      ];
+      if (checked.status === 'available') {
+        this.store.updateRequest(
+          id,
+          'available',
+          'An available copy was found while rechecking your connected libraries.',
+        );
+        return;
+      }
+      if (checked.status !== 'not_found') {
+        const waiting =
+          checked.status === 'unknown' && (!checked.confirmed || checked.items.length > 0);
+        this.store.updateRequest(
+          id,
+          waiting ? 'pending_setup' : 'needs_review',
+          waiting
+            ? 'Waiting for complete, fresh library verification before acquisition.'
+            : checked.reason,
+        );
+        return;
+      }
+      const ready = this.store.db
+        .prepare(
+          "UPDATE requests SET status='submitting',message='Sending the verified missing format to Chaptarr.',updated_at=? WHERE id=? AND status='checking'",
+        )
+        .run(new Date().toISOString(), id);
+      if (!ready.changes) return;
+      const result = await this.chaptarr.submit(
+        book,
+        kind,
+        () => {
+          if (this.stopping) throw new Error('Submission interrupted by server shutdown.');
+          const current = bookResult(book, this.store, this.config.inventoryMaxAgeHours)
+            .availability[kind];
+          if (current.status !== 'not_found')
+            throw new Error(
+              'Library availability changed during submission. Review before continuing.',
+            );
+        },
+        resolved,
+      );
+      this.store.setSetting(retryKey, '');
       this.store.updateRequest(
         id,
         result.available ? 'available' : 'requested',
@@ -171,6 +242,27 @@ export class Services {
         result.id,
       );
     } catch (error) {
+      if (
+        this.store.request(id)?.status === 'cancelled' ||
+        this.store.request(id)?.status === 'rejected'
+      )
+        return;
+      if (error instanceof LookupPendingError && retry.attempts < 6) {
+        const attempts = retry.attempts + 1;
+        this.store.setSetting(
+          retryKey,
+          JSON.stringify({
+            attempts,
+            after: Date.now() + Math.min(15, 2 ** (attempts - 1)) * 60000,
+          }),
+        );
+        this.store.updateRequest(
+          id,
+          'pending_metadata',
+          'Waiting for Chaptarr metadata. Lookup will retry automatically before any book is added.',
+        );
+        return;
+      }
       this.store.updateRequest(
         id,
         'needs_review',
@@ -184,7 +276,7 @@ export class Services {
     if (this.stopping || this.config.demo) return;
     const active = this.store.db
       .prepare(
-        "SELECT * FROM requests WHERE status IN ('pending_setup','requested','downloading','importing')",
+        "SELECT * FROM requests WHERE status IN ('pending_setup','pending_metadata','requested','downloading','importing','needs_review')",
       )
       .all() as Record<string, unknown>[];
     if (!active.length) return;
@@ -206,7 +298,14 @@ export class Services {
       const latest = this.store.request(id);
       if (
         !latest ||
-        !['pending_setup', 'requested', 'downloading', 'importing'].includes(String(latest.status))
+        ![
+          'pending_setup',
+          'pending_metadata',
+          'requested',
+          'downloading',
+          'importing',
+          'needs_review',
+        ].includes(String(latest.status))
       )
         continue;
       if (!book) continue;
@@ -218,10 +317,11 @@ export class Services {
         this.store.updateRequest(id, 'available', 'Available in your connected library.');
         continue;
       }
-      if (request.status === 'pending_setup') {
-        await this.dispatch(id);
+      if (['pending_setup', 'pending_metadata'].includes(String(request.status))) {
+        this.enqueue(id);
         continue;
       }
+      if (latest.status === 'needs_review') continue;
       const item = queue?.find(
         (q) => q.bookId === request.upstream_id || q.book?.id === request.upstream_id,
       );

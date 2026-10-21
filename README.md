@@ -30,12 +30,14 @@ cp .env.example .env
 Generate **two different** private values with `openssl rand -hex 24` and `openssl rand -hex 32`. Set `BOOKSEER_ADMIN_PASSWORD` and `BOOKSEER_SESSION_SECRET` in `.env`, then:
 
 ```sh
-docker compose up -d --build
+docker compose up -d
 ```
 
 Open `http://YOUR-NAS-ADDRESS:5057`, sign in as `admin`, connect your existing services in **Connections**, and create reader accounts in **Users**. If Node.js is installed, `node scripts/setup.mjs` can generate the private environment file for you instead.
 
 Docker Compose is the primary deployment method. The same setup applies to Synology, QNAP, TrueNAS releases with Docker support, Unraid, UGREEN, Portainer, and Linux hosts. The container targets x86-64 and ARM64. Platform-specific instructions, networking, permissions, HTTPS, updates, and backups are in [the deployment guide](docs/deployment.md).
+
+The public image is `ghcr.io/teamcogs/bookseer:latest`, with x86-64 and ARM64 variants. Use `docker compose up -d --build` to build the checked-out source. Portainer users can use [the standalone stack file](deploy/portainer-compose.yaml), which does not require a local environment file.
 
 ## How it fits
 

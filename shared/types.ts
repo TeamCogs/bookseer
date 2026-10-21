@@ -58,6 +58,8 @@ export interface LibraryGroup {
 export type RequestStatus =
   | 'pending_approval'
   | 'pending_setup'
+  | 'pending_metadata'
+  | 'checking'
   | 'submitting'
   | 'requested'
   | 'downloading'

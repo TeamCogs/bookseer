@@ -1,8 +1,9 @@
 import type { CatalogBook, LibraryItem, MediaKind } from '../../shared/types.js';
 import type { ConnectionConfig } from '../config.js';
 import { digest } from '../security.js';
-import { identifiers, normalizeAuthor, normalizeText } from '../matching.js';
+import { compatibleExtent, identifiers, normalizeAuthor, normalizeText } from '../matching.js';
 import { array, IntegrationError, object, readJson, upstream } from './http.js';
+export class LookupPendingError extends IntegrationError {}
 
 export class Chaptarr {
   private controller = new AbortController();
@@ -33,11 +34,15 @@ export class Chaptarr {
     const p = this.profiles(kind);
     return this.configured && p.quality > 0 && p.metadata > 0 && Boolean(p.root);
   }
-  async json(path: string, body?: unknown): Promise<unknown> {
+  async json(
+    path: string,
+    body?: unknown,
+    method = body === undefined ? 'GET' : 'POST',
+  ): Promise<unknown> {
     return readJson(
       await upstream(this.config.chaptarrUrl, '/api/v1' + path, {
         signal: this.controller.signal,
-        method: body === undefined ? 'GET' : 'POST',
+        method,
         headers: { 'X-Api-Key': this.config.chaptarrApiKey, 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
       }),
@@ -49,6 +54,7 @@ export class Chaptarr {
   map(book: Record<string, any>): LibraryItem {
     if (
       !Number.isSafeInteger(book.id) ||
+      book.id <= 0 ||
       typeof book.title !== 'string' ||
       !['ebook', 'audiobook'].includes(book.mediaType)
     )
@@ -101,11 +107,7 @@ export class Chaptarr {
       year: book.releaseDate ? Number(String(book.releaseDate).slice(0, 4)) : undefined,
     };
   }
-  async submit(
-    book: CatalogBook,
-    kind: MediaKind,
-    beforeWrite: () => void,
-  ): Promise<{ id: number; available: boolean }> {
+  async lookup(book: CatalogBook, kind: MediaKind): Promise<Record<string, any>> {
     if (!this.ready(kind))
       throw new IntegrationError(
         'Set Chaptarr root folders and profile IDs before enabling acquisition.',
@@ -113,20 +115,54 @@ export class Chaptarr {
     const lookupTerm =
       book.identifiers.work.find((id) => /^(ol:|hc:|gr:|gb:)/.test(id)) ||
       `${book.title} ${book.author}`;
-    const found = array(
+    let found = array(
       await this.json(`/book/lookup?term=${encodeURIComponent(lookupTerm)}&mediaType=${kind}`),
     );
-    const matches = found.filter(
-      (candidate) =>
-        normalizeText(candidate.title || '') === normalizeText(book.title) &&
+    if (!found.length && lookupTerm !== book.title)
+      found = array(
+        await this.json(`/book/lookup?term=${encodeURIComponent(book.title)}&mediaType=${kind}`),
+      );
+    if (!found.length)
+      throw new LookupPendingError('Chaptarr metadata is not ready for this work yet.');
+    const matches = found.filter((candidate) => {
+      const sameTitle = normalizeText(candidate.title || '') === normalizeText(book.title);
+      const candidateWork = identifiers(
+        [],
+        [
+          candidate.foreignBookId,
+          candidate.openLibraryWorkId
+            ? String(candidate.openLibraryWorkId).startsWith('ol:')
+              ? candidate.openLibraryWorkId
+              : `ol:${candidate.openLibraryWorkId}`
+            : null,
+          candidate.hardcoverBookId
+            ? String(candidate.hardcoverBookId).startsWith('hc:')
+              ? candidate.hardcoverBookId
+              : `hc:${candidate.hardcoverBookId}`
+            : null,
+        ],
+      ).work;
+      const sameWork = candidateWork.some((id) => book.identifiers.work.includes(id));
+      return (
+        (sameTitle || (sameWork && compatibleExtent(book.title, candidate.title || ''))) &&
         normalizeAuthor(candidate.author?.authorName || candidate.author?.name || '') ===
-          normalizeAuthor(book.author),
-    );
+          normalizeAuthor(book.author)
+      );
+    });
     if (matches.length !== 1)
       throw new IntegrationError(
         'Chaptarr did not resolve a unique matching work. Review the book in Chaptarr before requesting it.',
       );
     const candidate = matches[0];
+    return candidate;
+  }
+  async submit(
+    book: CatalogBook,
+    kind: MediaKind,
+    beforeWrite: () => void,
+    resolved?: Record<string, any>,
+  ): Promise<{ id: number; available: boolean }> {
+    const candidate = resolved || (await this.lookup(book, kind));
     const local =
       (kind === 'ebook' ? candidate.localEbookBooks : candidate.localAudiobookBooks) || [];
     const existing =
@@ -135,6 +171,20 @@ export class Chaptarr {
     beforeWrite();
     if (existing?.hasFiles) return { id: existing.id, available: true };
     let id = existing?.id;
+    if (existing && !existing.monitored) {
+      const stored = object(await this.json(`/book/${id}`));
+      if (stored.mediaType !== kind || stored.id !== id)
+        throw new IntegrationError(
+          'The existing Chaptarr instance does not match the requested format.',
+        );
+      if (stored.hasFiles) return { id, available: true };
+      beforeWrite();
+      await this.json(
+        `/book/${id}?mediaType=${kind}`,
+        { ...stored, monitored: true, [kind + 'Monitored']: true },
+        'PUT',
+      );
+    }
     if (!id) {
       const { root, quality, metadata } = this.profiles(kind);
       const payload = {

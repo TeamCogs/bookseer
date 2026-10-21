@@ -48,10 +48,10 @@ test('parts, volumes, collections and conflicting authors require identity revie
     'available',
   );
 });
-test('absent files, partial evidence, failed sources, and stale scans never prove availability or absence', () => {
+test('fresh inventories permit requesting known missing files; incomplete or stale evidence remains unknown', () => {
   assert.equal(
     matchAvailability(book, 'ebook', [{ ...item, available: false }], fresh(), 24).status,
-    'unknown',
+    'not_found',
   );
   assert.equal(
     matchAvailability(book, 'ebook', [item], [{ ...fresh()[0], status: 'error' }], 24).label,

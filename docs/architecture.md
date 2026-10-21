@@ -43,7 +43,7 @@ requested by a reader -> pending approval -> approved / waiting for setup
                      -> needs review if identity, network outcome, or import is uncertain
 ```
 
-A unique database constraint coalesces concurrent requests for the same catalogue work and medium. Every remote write rechecks inventory, and submission reserves the request atomically. Chaptarr lookup must resolve a unique compatible work. Existing local instances are reused. Only the requested medium is submitted, with separate destination and profile settings. New authors do not automatically monitor their entire catalogue.
+A unique database constraint coalesces concurrent requests for the same catalogue work and medium. Approved requests are processed in the background with a visible inventory-checking state. Complete connected inventories are refreshed before acquisition, then every remote write checks availability again. The browser can leave the page while verification proceeds. Cancellation during checking prevents submission. Chaptarr lookup must resolve a unique compatible work. Existing local instances are reused. Only the requested medium is submitted, with separate destination and profile settings. New authors do not automatically monitor their entire catalogue.
 
 An HTTP timeout, unexpected add response, Chaptarr `202 pending` response, or restart during submission moves the request to review. Bookseer does not automatically replay an uncertain add. An administrator must check Chaptarr before reopening it. Cancelling a Bookseer request is supported before dispatch; active acquisition is managed in Chaptarr.
 
