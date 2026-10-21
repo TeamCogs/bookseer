@@ -50,8 +50,23 @@ export interface BookResult {
   requests?: Partial<Record<MediaKind, { id: string; status: RequestStatus; following: boolean }>>;
   copies?: LibraryItem[];
 }
-export interface LibraryGroup { id: string; canonicalId: string; itemIds: string[]; }
-export type RequestStatus = 'pending_approval' | 'pending_setup' | 'submitting' | 'requested' | 'downloading' | 'importing' | 'available' | 'failed' | 'needs_review' | 'rejected' | 'cancelled';
+export interface LibraryGroup {
+  id: string;
+  canonicalId: string;
+  itemIds: string[];
+}
+export type RequestStatus =
+  | 'pending_approval'
+  | 'pending_setup'
+  | 'submitting'
+  | 'requested'
+  | 'downloading'
+  | 'importing'
+  | 'available'
+  | 'failed'
+  | 'needs_review'
+  | 'rejected'
+  | 'cancelled';
 export interface BookRequest {
   id: string;
   catalogId: string;

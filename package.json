@@ -5,7 +5,9 @@
   "description": "A Docker-first book discovery, ownership, and request portal for official Chaptarr and BookOrbit.",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22.13.0" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "dev": "concurrently -k -n api,web \"npm:dev:server\" \"npm:dev:web\"",
@@ -16,7 +18,9 @@
     "demo": "node --import tsx server/demo.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.3",
@@ -34,6 +38,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.1.2",
     "concurrently": "^9.0.0",
+    "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"

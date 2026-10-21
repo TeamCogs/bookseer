@@ -13,7 +13,7 @@ services:
       BOOKSEER_ADMIN_PASSWORD: ${BOOKSEER_ADMIN_PASSWORD:?Generate a private admin password in .env}
       BOOKSEER_SESSION_SECRET: ${BOOKSEER_SESSION_SECRET:?Generate a private encryption key in .env}
     ports:
-      - "${BOOKSEER_BIND_ADDRESS:-0.0.0.0}:${BOOKSEER_PORT:-5057}:5057"
+      - '${BOOKSEER_BIND_ADDRESS:-0.0.0.0}:${BOOKSEER_PORT:-5057}:5057'
     volumes:
       - bookseer_data:/data
     read_only: true
@@ -26,7 +26,7 @@ services:
       driver: json-file
       options:
         max-size: 10m
-        max-file: "3"
+        max-file: '3'
 
 volumes:
   bookseer_data:

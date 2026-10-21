@@ -1,0 +1,32 @@
+name: Official Chaptarr compatibility
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  upstream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: corepack enable && pnpm install --frozen-lockfile && pnpm build
+      - name: Start isolated official Chaptarr
+        run: |
+          mkdir -p "$RUNNER_TEMP/chaptarr/config" "$RUNNER_TEMP/chaptarr/ebooks"
+          CHAPTARR_TEST_KEY=$(openssl rand -hex 16)
+          echo "CHAPTARR_API_KEY=$CHAPTARR_TEST_KEY" >> "$GITHUB_ENV"
+          echo "CHAPTARR_URL=http://127.0.0.1:8789" >> "$GITHUB_ENV"
+          cat > "$RUNNER_TEMP/chaptarr/config/config.xml" <<EOF
+          <Config><BindAddress>*</BindAddress><Port>8789</Port><ApiKey>$CHAPTARR_TEST_KEY</ApiKey><AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>info</LogLevel><LaunchBrowser>False</LaunchBrowser><UpdateMechanism>Docker</UpdateMechanism></Config>
+          EOF
+          docker run -d --name upstream -p 127.0.0.1:8789:8789 -e PUID="$(id -u)" -e PGID="$(id -g)" -v "$RUNNER_TEMP/chaptarr/config:/config" -v "$RUNNER_TEMP/chaptarr/ebooks:/ebooks" chaptarr/chaptarr:latest
+          for attempt in $(seq 1 60); do curl -fsS -H "X-Api-Key: $CHAPTARR_TEST_KEY" http://127.0.0.1:8789/api/v1/system/status > /dev/null && exit 0; sleep 2; done
+          exit 1
+      - name: Exercise actual native API
+        run: node scripts/verify-chaptarr.mjs
+      - name: Upstream diagnostics
+        if: failure()
+        run: docker logs --tail=100 upstream

@@ -9,4 +9,3 @@
 - Keep secrets, user databases, real inventory exports, environment files, and local operational evidence out of Git.
 - Validate core matching behavior, HTTP integration contracts, request safety, and production build. Document live verification limits honestly.
 - Scott / TeamCogs is the sole commit author and maintainer. Do not add co-author trailers, collaborators, bot-authored commits, or auto-merge automation.
-
