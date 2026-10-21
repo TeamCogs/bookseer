@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible Bookseer problem
+description: Report a reproducible Bookseerr problem
 body:
   - type: textarea
     id: behavior
@@ -11,7 +11,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Bookseer version or commit
+      label: Bookseerr version or commit
     validations:
       required: true
   - type: textarea

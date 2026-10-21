@@ -1,6 +1,6 @@
 # Contributing
 
-Bookseer currently has one maintainer and code contributor: [Scott / TeamCogs](https://github.com/TeamCogs).
+Bookseerr currently has one maintainer and code contributor: [Scott / TeamCogs](https://github.com/TeamCogs).
 
 Bug reports, reproducible examples, and feature suggestions are welcome through GitHub issues. Please do not include credentials, API keys, access tokens, database files, or private library exports.
 

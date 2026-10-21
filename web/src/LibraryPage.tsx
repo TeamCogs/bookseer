@@ -163,7 +163,7 @@ export function LibraryPage({
         <div className="alert">
           <span>
             Select entries that are the same work to combine different titles or metadata. The
-            preferred title and every copy are preserved in Bookseer. Parts and collections should
+            preferred title and every copy are preserved in Bookseerr. Parts and collections should
             stay separate.
           </span>
           <button
@@ -330,7 +330,7 @@ function GroupDialog({
       <p className="eyebrow">REVIEW DUPLICATE COPIES</p>
       <h2 id="group-dialog-title">One book, every copy.</h2>
       <p className="muted small">
-        Choose the preferred title. Grouping changes how Bookseer displays these entries; your
+        Choose the preferred title. Grouping changes how Bookseerr displays these entries; your
         library files and metadata remain intact.
       </p>
       {error ? (

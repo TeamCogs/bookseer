@@ -1,14 +1,14 @@
-# How Bookseer works
+# How Bookseerr works
 
-Bookseer is a self-hosted discovery, availability, and request portal. Official [Chaptarr](https://github.com/Chaptarr/chaptarr) manages acquisition and imports. [BookOrbit](https://github.com/bookorbit/bookorbit) supplies existing inventory and reader links. Bookseer is an independent application, not a fork or an official part of either project.
+Bookseerr is a self-hosted discovery, availability, and request portal. Official [Chaptarr](https://github.com/Chaptarr/chaptarr) manages acquisition and imports. [BookOrbit](https://github.com/bookorbit/bookorbit) supplies existing inventory and reader links. Bookseerr is an independent application, not a fork or an official part of either project.
 
 ```mermaid
 flowchart LR
-  Readers[Household readers] --> Bookseer[Bookseer: accounts, search, requests]
-  Bookseer --> Catalogue[Open Library metadata]
-  BookOrbit[BookOrbit inventory] --> Bookseer
-  Chaptarr[Official Chaptarr inventory and queue] --> Bookseer
-  Bookseer -->|Approved missing format| Chaptarr
+  Readers[Household readers] --> Bookseerr[Bookseerr: accounts, search, requests]
+  Bookseerr --> Catalogue[Open Library metadata]
+  BookOrbit[BookOrbit inventory] --> Bookseerr
+  Chaptarr[Official Chaptarr inventory and queue] --> Bookseerr
+  Bookseerr -->|Approved missing format| Chaptarr
   Chaptarr --> Clients[Existing indexers and download clients]
   Clients --> Files[Existing library files]
   Files --> BookOrbit
@@ -22,9 +22,9 @@ Public registration is closed. Users cannot change their own role, quota, approv
 
 ## Availability and matching
 
-Ebooks and audiobooks are independent. A monitored Chaptarr record is not a file. BookOrbit records marked missing are not available copies. A full recent inventory must support a negative ownership result before Bookseer sends an acquisition request.
+Ebooks and audiobooks are independent. A monitored Chaptarr record is not a file. BookOrbit records marked missing are not available copies. A full recent inventory must support a negative ownership result before Bookseerr sends an acquisition request.
 
-Chaptarr may create an author's unmonitored catalogue during a single-book add. Bookseer reads the complete response but excludes catalogue-only records with no files and no active monitoring. Existing files remain included even if their Chaptarr monitoring is disabled. Actively tracked books without files remain visible with unavailable format badges.
+Chaptarr may create an author's unmonitored catalogue during a single-book add. Bookseerr reads the complete response but excludes catalogue-only records with no files and no active monitoring. Existing files remain included even if their Chaptarr monitoring is disabled. Actively tracked books without files remain visible with unavailable format badges.
 
 Matching checks normalized title and author, validated ISBNs, and provider work identities. Filename prefixes such as `Author, First - Series 03 - Title.epub` are normalized for display and matching. Parts, volumes, and collections are kept distinct. Related or conflicting metadata requires an administrator's persistent identity decision. Confirming identity does not invent a missing file. Dismissing a possible match applies only to the reviewed item, not future copies.
 
@@ -47,9 +47,9 @@ requested by a reader -> pending approval -> approved / waiting for setup
 
 A unique database constraint coalesces concurrent requests for the same catalogue work and medium. Approved requests are processed in the background with a visible inventory-checking state. Complete connected inventories are refreshed before acquisition, then every remote write checks availability again. The browser can leave the page while verification proceeds. Cancellation during checking prevents submission. Chaptarr lookup must resolve a unique compatible work. Existing local instances are reused. Only the requested medium is submitted, with separate destination and profile settings. New authors do not automatically monitor their entire catalogue.
 
-Requests made from a connected-library card and an online result with the same complete normalized title and author, or a compatible resolved work identity, join the same format request. This identity check runs inside the database transaction, before applying a new-request quota. Both views show the same request and following state. Incomplete identities, parts, volumes, and different authors remain separate. Chaptarr's validated canonical work aliases persist in Bookseer's catalogue through later discovery refreshes so an imported edition can fulfill the original request despite a subtitle difference.
+Requests made from a connected-library card and an online result with the same complete normalized title and author, or a compatible resolved work identity, join the same format request. This identity check runs inside the database transaction, before applying a new-request quota. Both views show the same request and following state. Incomplete identities, parts, volumes, and different authors remain separate. Chaptarr's validated canonical work aliases persist in Bookseerr's catalogue through later discovery refreshes so an imported edition can fulfill the original request despite a subtitle difference.
 
-An empty metadata lookup is retried with persistent backoff before any add is attempted. Six unsuccessful retries eventually require review. A Chaptarr `202` response with a valid pending-operation ID is saved and followed through read-only lookups for up to six hours. Once its local instance exists, Bookseer reuses it and sends the format's search command without repeating the add. An HTTP timeout during submission, unexpected response, unresolved pending operation, or restart during an uncertain write moves the request to review. An administrator must check Chaptarr before reopening it. Cancellation remains available during metadata and inventory checks; active acquisition is managed in Chaptarr. Readers can stop following a shared request without cancelling it for others. A previously fulfilled request can acquire the format again if a fresh complete inventory confirms its files are now missing; each new acquisition still counts toward the requester's limit.
+An empty metadata lookup is retried with persistent backoff before any add is attempted. Six unsuccessful retries eventually require review. A Chaptarr `202` response with a valid pending-operation ID is saved and followed through read-only lookups for up to six hours. Once its local instance exists, Bookseerr reuses it and sends the format's search command without repeating the add. An HTTP timeout during submission, unexpected response, unresolved pending operation, or restart during an uncertain write moves the request to review. An administrator must check Chaptarr before reopening it. Cancellation remains available during metadata and inventory checks; active acquisition is managed in Chaptarr. Readers can stop following a shared request without cancelling it for others. A previously fulfilled request can acquire the format again if a fresh complete inventory confirms its files are now missing; each new acquisition still counts toward the requester's limit.
 
 ## Runtime and data
 
@@ -57,4 +57,4 @@ The production container serves the React interface and Fastify API from one ori
 
 Passwords use salted scrypt hashes. Session cookies are opaque and HTTP-only; session tokens are hashed in the database. Writes require CSRF tokens and same-origin checks. Connection credentials saved in the interface use authenticated encryption with the private installation key. Request logging omits credentials and search contents. Cover access is authenticated and bounded. Only administrators can configure upstream service URLs.
 
-Search queries go to Open Library. BookOrbit login and inventory requests go to the configured BookOrbit server. Chaptarr receives work identifiers and approved acquisition requests. Bookseer does not run downloads or change your download clients' routing. Configure VPN isolation and import paths in the acquisition stack itself.
+Search queries go to Open Library. BookOrbit login and inventory requests go to the configured BookOrbit server. Chaptarr receives work identifiers and approved acquisition requests. Bookseerr does not run downloads or change your download clients' routing. Configure VPN isolation and import paths in the acquisition stack itself.

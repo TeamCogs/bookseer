@@ -2,6 +2,6 @@
 # docker compose -f compose.yaml -f deploy/compose.image.yaml pull
 # docker compose -f compose.yaml -f deploy/compose.image.yaml up -d --no-build
 services:
-  bookseer:
-    image: ghcr.io/teamcogs/bookseer:${BOOKSEER_IMAGE_TAG:-latest}
+  bookseerr:
+    image: ghcr.io/teamcogs/bookseerr:${BOOKSEERR_IMAGE_TAG:-latest}
     pull_policy: always

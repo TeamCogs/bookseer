@@ -1,6 +1,6 @@
 services:
-  bookseer:
-    image: ghcr.io/teamcogs/bookseer:${BOOKSEER_IMAGE_TAG:-latest}
+  bookseerr:
+    image: ghcr.io/teamcogs/bookseerr:${BOOKSEERR_IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -10,13 +10,13 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 5057
-      BOOKSEER_DATA_DIR: /data
-      BOOKSEER_ADMIN_PASSWORD: ${BOOKSEER_ADMIN_PASSWORD:?Generate a private admin password in .env}
-      BOOKSEER_SESSION_SECRET: ${BOOKSEER_SESSION_SECRET:?Generate a private encryption key in .env}
+      BOOKSEERR_DATA_DIR: /data
+      BOOKSEERR_ADMIN_PASSWORD: ${BOOKSEERR_ADMIN_PASSWORD:?Generate a private admin password in .env}
+      BOOKSEERR_SESSION_SECRET: ${BOOKSEERR_SESSION_SECRET:?Generate a private encryption key in .env}
     ports:
-      - '${BOOKSEER_BIND_ADDRESS:-0.0.0.0}:${BOOKSEER_PORT:-5057}:5057'
+      - '${BOOKSEERR_BIND_ADDRESS:-0.0.0.0}:${BOOKSEERR_PORT:-5057}:5057'
     volumes:
-      - bookseer_data:/data
+      - bookseerr_data:/data
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
@@ -30,4 +30,5 @@ services:
         max-file: '3'
 
 volumes:
-  bookseer_data:
+  bookseerr_data:
+    name: ${BOOKSEERR_DATA_VOLUME:-bookseerr_data}

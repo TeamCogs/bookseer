@@ -110,7 +110,7 @@ test('fresh inventories permit requesting known missing files; incomplete or sta
   assert.equal(matchAvailability(book, 'ebook', [], [], 24).status, 'unknown');
 });
 test('manual identity and different-book decisions survive restart but cannot invent missing files', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'bookseer-match-'));
+  const directory = mkdtempSync(join(tmpdir(), 'bookseerr-match-'));
   const path = join(directory, 'test.sqlite');
   let store = new Store(path);
   try {

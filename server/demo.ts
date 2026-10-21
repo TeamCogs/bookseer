@@ -4,10 +4,10 @@ import type { CatalogBook, LibraryItem } from '../shared/types.js';
 import { hashPassword } from './security.js';
 
 const config = loadConfig({
-  BOOKSEER_DEMO: 'true',
-  BOOKSEER_ADMIN_PASSWORD: 'demo-password-only',
-  BOOKSEER_SESSION_SECRET: 'isolated-demo-data-not-for-production',
-  BOOKSEER_PORT: process.env.BOOKSEER_PORT || '5058',
+  BOOKSEERR_DEMO: 'true',
+  BOOKSEERR_ADMIN_PASSWORD: 'demo-password-only',
+  BOOKSEERR_SESSION_SECRET: 'isolated-demo-data-not-for-production',
+  BOOKSEERR_PORT: process.env.BOOKSEERR_PORT || '5058',
 });
 const { app, store } = await buildApp(config, { logger: true });
 store.db

@@ -326,7 +326,7 @@ export class Chaptarr {
         throw new PendingAddError(response.pendingId);
       if (!Number.isSafeInteger(response.id) || response.id <= 0)
         throw new IntegrationError(
-          'Chaptarr accepted a pending or unexpected add response. Verify it in Chaptarr; Bookseer will not retry automatically.',
+          'Chaptarr accepted a pending or unexpected add response. Verify it in Chaptarr; Bookseerr will not retry automatically.',
         );
       id = response.id;
     }

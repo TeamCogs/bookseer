@@ -13,7 +13,7 @@ test('connection checks load names without saving or exposing secrets', async (t
   const { app } = await buildApp(c, { store });
   const owner = store.users()[0];
   const session = store.createSession(owner.id);
-  const headers = { cookie: 'bookseer_session=' + session.value, 'x-csrf-token': session.csrf };
+  const headers = { cookie: 'bookseerr_session=' + session.value, 'x-csrf-token': session.csrf };
   t.mock.method(globalThis, 'fetch', async (input: string) => {
     const path = new URL(String(input)).pathname;
     if (path.endsWith('/auth/login')) return json({ accessToken: 'private-token-fixture' });
@@ -51,7 +51,7 @@ test('connection checks load names without saving or exposing secrets', async (t
 });
 
 test('library grouping and undo persist, preserve all inventory, and require administrator permission', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'bookseer-group-'));
+  const directory = mkdtempSync(join(tmpdir(), 'bookseerr-group-'));
   const path = join(directory, 'test.sqlite');
   let store = new Store(path);
   let app;
@@ -68,7 +68,7 @@ test('library grouping and undo persist, preserve all inventory, and require adm
     });
     const actor = store.createSession(owner.id);
     const guest = store.createSession(reader.id);
-    const headers = { cookie: 'bookseer_session=' + actor.value, 'x-csrf-token': actor.csrf };
+    const headers = { cookie: 'bookseerr_session=' + actor.value, 'x-csrf-token': actor.csrf };
     store.replaceInventory('bookorbit', [
       item,
       { ...item, id: 'alternative', title: 'Alternative title' },
@@ -79,7 +79,7 @@ test('library grouping and undo persist, preserve all inventory, and require adm
         await app.inject({
           method: 'POST',
           url: '/api/library/groups',
-          headers: { cookie: 'bookseer_session=' + guest.value, 'x-csrf-token': guest.csrf },
+          headers: { cookie: 'bookseerr_session=' + guest.value, 'x-csrf-token': guest.csrf },
           payload,
         })
       ).statusCode,
@@ -113,14 +113,14 @@ test('library grouping and undo persist, preserve all inventory, and require adm
 });
 
 test('the production entry point and assets serve while private API routes remain authenticated', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'bookseer-static-'));
-  writeFileSync(join(directory, 'index.html'), '<html><title>Bookseer</title></html>');
+  const directory = mkdtempSync(join(tmpdir(), 'bookseerr-static-'));
+  writeFileSync(join(directory, 'index.html'), '<html><title>Bookseerr</title></html>');
   const store = new Store(':memory:');
   const { app } = await buildApp(config(), { store, staticDir: directory });
   try {
     const page = await app.inject('/');
     assert.equal(page.statusCode, 200);
-    assert.match(page.body, /Bookseer/);
+    assert.match(page.body, /Bookseerr/);
     assert.equal(page.headers['cache-control'], 'no-cache');
     assert.equal((await app.inject('/api/library')).statusCode, 401);
     assert.equal((await app.inject('/api/unknown')).statusCode, 404);

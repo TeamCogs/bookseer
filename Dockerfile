@@ -11,11 +11,11 @@ COPY web ./web
 RUN pnpm build && pnpm prune --prod
 
 FROM node:24-bookworm-slim AS runtime
-ENV NODE_ENV=production HOST=0.0.0.0 PORT=5057 BOOKSEER_DATA_DIR=/data
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=5057 BOOKSEERR_DATA_DIR=/data
 WORKDIR /app
-LABEL org.opencontainers.image.title="Bookseer" \
+LABEL org.opencontainers.image.title="Bookseerr" \
       org.opencontainers.image.description="Shared book discovery and requests for Docker and NAS deployments" \
-      org.opencontainers.image.source="https://github.com/TeamCogs/bookseer" \
+      org.opencontainers.image.source="https://github.com/TeamCogs/bookseerr" \
       org.opencontainers.image.licenses="MIT"
 COPY --from=build --chown=node:node /app/package.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules

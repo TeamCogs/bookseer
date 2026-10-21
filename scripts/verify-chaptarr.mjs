@@ -38,7 +38,7 @@ const q =
 const m = metadata.find((p) => String(p.profileType).toLowerCase() === 'ebook') || metadata[0];
 assert.ok(q?.id && m?.id, 'Fresh upstream profiles are required.');
 await api('/rootfolder', {
-  name: 'Bookseer isolated fixture',
+  name: 'Bookseerr isolated fixture',
   path: '/ebooks',
   folderType: 2,
   ebook: {
@@ -52,7 +52,7 @@ await api('/rootfolder', {
   defaultSyncMonitoredAcrossFormats: false,
 });
 const c = loadConfig({
-  BOOKSEER_DEMO: 'true',
+  BOOKSEERR_DEMO: 'true',
   CHAPTARR_URL: base,
   CHAPTARR_API_KEY: apiKey,
   CHAPTARR_EBOOK_ROOT_FOLDER: '/ebooks',
@@ -66,7 +66,7 @@ for (let attempt = 0; attempt < 8; attempt++) {
   found = await api('/book/lookup?term=ol%3AOL450063W&mediaType=ebook');
   if (!found.length) {
     // Legacy text lookup uses audiobook previews; an ebook filter removes them.
-    // The Bookseer adapter resolves the provider identity and scopes the actual add.
+    // The Bookseerr adapter resolves the provider identity and scopes the actual add.
     const search = await api('/search?term=Frankenstein&provider=goodreads');
     found = search.map((entry) => entry.book).filter(Boolean);
   }
@@ -115,7 +115,7 @@ try {
   acceptedPending = true;
   // Acceptance is not proof that upstream created or imported a book.
   console.log(
-    'Official upstream accepted an asynchronous addition. Bookseer tracks it without repeating the add; completed acquisition remains unverified.',
+    'Official upstream accepted an asynchronous addition. Bookseerr tracks it without repeating the add; completed acquisition remains unverified.',
   );
 }
 const books = await adapter.inventory();

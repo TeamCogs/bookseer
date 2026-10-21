@@ -1,5 +1,5 @@
 {
-  "name": "bookseer",
+  "name": "bookseerr",
   "version": "0.1.0",
   "private": true,
   "description": "A Docker-first book discovery, ownership, and request portal for official Chaptarr and BookOrbit.",

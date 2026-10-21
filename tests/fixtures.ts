@@ -2,9 +2,9 @@ import type { CatalogBook, LibraryItem, SourceState } from '../shared/types.js';
 import { loadConfig } from '../server/config.js';
 export const config = () =>
   loadConfig({
-    BOOKSEER_ADMIN_PASSWORD: 'a-strong-test-password',
-    BOOKSEER_SESSION_SECRET: 'a-private-test-key-at-least-32-characters',
-    BOOKSEER_DATA_DIR: '/tmp/bookseer-test-unused',
+    BOOKSEERR_ADMIN_PASSWORD: 'a-strong-test-password',
+    BOOKSEERR_SESSION_SECRET: 'a-private-test-key-at-least-32-characters',
+    BOOKSEERR_DATA_DIR: '/tmp/bookseerr-test-unused',
   });
 export const book: CatalogBook = {
   id: 'ol:OL20158882W',

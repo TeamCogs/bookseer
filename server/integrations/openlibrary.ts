@@ -27,7 +27,7 @@ export class OpenLibrary {
               `/search.json?q=${encodeURIComponent(query)}&limit=30&fields=${fields}`,
               {
                 headers: {
-                  'User-Agent': `Bookseer/0.1.0${this.contact ? ` (${this.contact})` : ''}`,
+                  'User-Agent': `Bookseerr/0.1.0${this.contact ? ` (${this.contact})` : ''}`,
                   Accept: 'application/json',
                 },
               },

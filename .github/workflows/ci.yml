@@ -1,4 +1,4 @@
-name: Verify Bookseer
+name: Verify Bookseerr
 on:
   push:
     branches: [main]
@@ -28,29 +28,29 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - run: docker build -t bookseer:test .
+      - run: docker build -t bookseerr:test .
       - name: Create isolated credentials
         run: |
           TEST_PASSWORD=$(openssl rand -hex 24)
           TEST_KEY=$(openssl rand -hex 32)
           echo "::add-mask::$TEST_PASSWORD"
           echo "::add-mask::$TEST_KEY"
-          echo "BOOKSEER_ADMIN_PASSWORD=$TEST_PASSWORD" >> "$GITHUB_ENV"
-          echo "BOOKSEER_SESSION_SECRET=$TEST_KEY" >> "$GITHUB_ENV"
+          echo "BOOKSEERR_ADMIN_PASSWORD=$TEST_PASSWORD" >> "$GITHUB_ENV"
+          echo "BOOKSEERR_SESSION_SECRET=$TEST_KEY" >> "$GITHUB_ENV"
       - name: Run hardened container
         run: |
-          docker volume create bookseer-test
-          docker run -d --name bookseer --read-only --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:rw,noexec,nosuid,size=64m -p 127.0.0.1:5057:5057 -v bookseer-test:/data -e BOOKSEER_ADMIN_PASSWORD -e BOOKSEER_SESSION_SECRET bookseer:test
+          docker volume create bookseerr-test
+          docker run -d --name bookseerr --read-only --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:rw,noexec,nosuid,size=64m -p 127.0.0.1:5057:5057 -v bookseerr-test:/data -e BOOKSEERR_ADMIN_PASSWORD -e BOOKSEERR_SESSION_SECRET bookseerr:test
           for attempt in $(seq 1 30); do curl -fsS http://127.0.0.1:5057/api/health && exit 0; sleep 2; done
-          docker logs bookseer
+          docker logs bookseerr
           exit 1
       - run: node scripts/docker-smoke.mjs
       - name: Verify persistence after restart
         run: |
-          docker restart bookseer
+          docker restart bookseerr
           for attempt in $(seq 1 30); do curl -fsS http://127.0.0.1:5057/api/health && break; sleep 2; done
           node scripts/docker-smoke.mjs
-          test "$(docker exec bookseer id -u)" != 0
+          test "$(docker exec bookseerr id -u)" != 0
       - name: Container diagnostics
         if: failure()
-        run: docker logs bookseer
+        run: docker logs bookseerr

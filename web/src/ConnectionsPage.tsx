@@ -217,7 +217,7 @@ export function ConnectionsPage({
               <span className="pill success">Read-only inventory</span>
             </div>
             <p className="muted">
-              Include the libraries you already own. Bookseer reads records and covers without
+              Include the libraries you already own. Bookseerr reads records and covers without
               changing your books.
             </p>
             <div className="form-grid">
@@ -335,7 +335,7 @@ export function ConnectionsPage({
               downloads, and imports in Chaptarr.
             </p>
             <p className="small muted">
-              Bookseer uses Chaptarr’s native Goodreads search, with Hardcover as an optional
+              Bookseerr uses Chaptarr’s native Goodreads search, with Hardcover as an optional
               fallback. Configure a Hardcover token in Chaptarr if you use that provider. Check a
               real title in Chaptarr before enabling automatic requests.
             </p>

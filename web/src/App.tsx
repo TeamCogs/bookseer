@@ -113,7 +113,7 @@ function Brand() {
         <BookOpen size={22} />
       </span>
       <span>
-        bookseer<span className="brand-period">.</span>
+        bookseerr<span className="brand-period">.</span>
       </span>
     </div>
   );
@@ -325,7 +325,7 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
           <div className="nas-note">
             <span className="live-dot" />
             <span>
-              Your library, at home<small>Self-hosted · Bookseer v0.1</small>
+              Your library, at home<small>Self-hosted · Bookseerr v0.1</small>
             </span>
           </div>
           <button className="profile" onClick={() => nav('account')}>
@@ -474,8 +474,8 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
           {page === 'account' ? <AccountPage user={user} signedOut={signedOut} /> : null}
           <footer className="page-footer">
             <span>Made for your next chapter.</span>
-            <a href="https://github.com/TeamCogs/bookseer" target="_blank" rel="noreferrer">
-              Bookseer on GitHub ↗
+            <a href="https://github.com/TeamCogs/bookseerr" target="_blank" rel="noreferrer">
+              Bookseerr on GitHub ↗
             </a>
           </footer>
         </main>

@@ -4,6 +4,7 @@ dist/
 .env.*
 !.env.example
 data/
+.bookseerr/
 .bookseer/
 coverage/
 *.sqlite

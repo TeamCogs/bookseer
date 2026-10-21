@@ -1,6 +1,6 @@
 # Feature and verification scope
 
-The product structure takes inspiration from the everyday flows documented by [Seerr](https://docs.seerr.dev/): multiple local users, restricted administration, shared requests, approvals, request limits, library-aware discovery, progress, and notifications. Bookseer implements these flows independently for books.
+The product structure takes inspiration from the everyday flows documented by [Seerr](https://docs.seerr.dev/): multiple local users, restricted administration, shared requests, approvals, request limits, library-aware discovery, progress, and notifications. Bookseerr implements these flows independently for books.
 
 | Area          | Implemented behavior                                                                                                                                                                                    |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

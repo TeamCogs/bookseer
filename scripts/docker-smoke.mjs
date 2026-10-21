@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-const base = process.env.BOOKSEER_TEST_URL || 'http://127.0.0.1:5057';
-const password = process.env.BOOKSEER_ADMIN_PASSWORD;
+const base = process.env.BOOKSEERR_TEST_URL || 'http://127.0.0.1:5057';
+const password = process.env.BOOKSEERR_ADMIN_PASSWORD;
 if (!password) throw new Error('Set the isolated test admin password.');
 async function call(path, options = {}) {
   const response = await fetch(base + path, options);
@@ -10,7 +10,7 @@ const health = await call('/api/health');
 assert.equal(health.response.status, 200);
 const html = await fetch(base + '/');
 assert.equal(html.status, 200);
-assert.match(await html.text(), /Bookseer/);
+assert.match(await html.text(), /Bookseerr/);
 assert.equal((await call('/api/library')).response.status, 401);
 const login = await call('/api/session', {
   method: 'POST',

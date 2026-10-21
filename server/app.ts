@@ -52,13 +52,18 @@ class PrivateLogController extends LogController {
   }
 }
 
+export function databasePath(dataDir: string): string {
+  const current = resolve(dataDir, 'bookseerr.sqlite');
+  const legacy = resolve(dataDir, 'bookseer.sqlite');
+  // Reuse an existing database and its WAL rather than bootstrapping an empty library.
+  return !existsSync(current) && existsSync(legacy) ? legacy : current;
+}
+
 export async function buildApp(
   config: Config,
   options: { store?: Store; services?: Services; staticDir?: string; logger?: boolean } = {},
 ) {
-  const store =
-    options.store ||
-    new Store(config.demo ? ':memory:' : resolve(config.dataDir, 'bookseer.sqlite'));
+  const store = options.store || new Store(config.demo ? ':memory:' : databasePath(config.dataDir));
   if (!store.users().length)
     await store.addUser({
       username: config.adminUsername,
@@ -117,7 +122,7 @@ export async function buildApp(
       if (origin !== allowed) throw new AppError(403, 'Cross-origin writes are not allowed.');
     }
     req.auth =
-      store.session(req.cookies.bookseer_session) ||
+      store.session(req.cookies.bookseerr_session) ||
       (config.demo ? { user: store.users()[0], csrf: 'demo-csrf' } : null);
     if (path === '/api/health' || (path === '/api/session' && ['GET', 'POST'].includes(req.method)))
       return;
@@ -134,7 +139,7 @@ export async function buildApp(
     reply.code(status).send({
       error:
         status >= 500
-          ? 'Bookseer could not complete the operation. Check the service configuration and server logs.'
+          ? 'Bookseerr could not complete the operation. Check the service configuration and server logs.'
           : problem.message,
     });
     if (status >= 500) app.log.error({ name: problem.name }, 'Operation failed');
@@ -170,15 +175,15 @@ export async function buildApp(
       );
       if (!valid || !credentials || credentials.disabled)
         throw new AppError(401, 'Username or password is incorrect.');
-      if (req.cookies.bookseer_session) store.revokeSession(req.cookies.bookseer_session);
+      if (req.cookies.bookseerr_session) store.revokeSession(req.cookies.bookseerr_session);
       const session = store.createSession(credentials.id);
-      reply.setCookie('bookseer_session', session.value, authCookie);
+      reply.setCookie('bookseerr_session', session.value, authCookie);
       return { user: store.user(credentials.id), csrf: session.csrf, demo: config.demo };
     },
   );
   app.delete('/api/session', async (req, reply) => {
-    if (req.cookies.bookseer_session) store.revokeSession(req.cookies.bookseer_session);
-    reply.clearCookie('bookseer_session', { path: '/' });
+    if (req.cookies.bookseerr_session) store.revokeSession(req.cookies.bookseerr_session);
+    reply.clearCookie('bookseerr_session', { path: '/' });
     return { ok: true };
   });
   app.get('/api/status', async (req) => ({
@@ -851,7 +856,7 @@ export async function buildApp(
       store.db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hash, user.id);
       store.db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
       store.audit(user.id, 'password.changed', 'All sessions revoked.');
-      reply.clearCookie('bookseer_session', { path: '/' });
+      reply.clearCookie('bookseerr_session', { path: '/' });
       return { ok: true };
     },
   );

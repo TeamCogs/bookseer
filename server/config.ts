@@ -55,26 +55,33 @@ export function validateServiceUrl(value: string): string {
   return url.toString().replace(/\/+$/, '');
 }
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const demo = env.BOOKSEER_DEMO === 'true';
-  const adminPassword = env.BOOKSEER_ADMIN_PASSWORD || '';
-  const secret = env.BOOKSEER_SESSION_SECRET || '';
+  // Keep existing deployments readable while all new setup uses the corrected name.
+  const legacy = Object.fromEntries(
+    Object.entries(env)
+      .filter(([key]) => key.startsWith('BOOKSEER_'))
+      .map(([key, value]) => [key.replace('BOOKSEER_', 'BOOKSEERR_'), value]),
+  );
+  env = { ...legacy, ...env };
+  const demo = env.BOOKSEERR_DEMO === 'true';
+  const adminPassword = env.BOOKSEERR_ADMIN_PASSWORD || '';
+  const secret = env.BOOKSEERR_SESSION_SECRET || '';
   if (!demo && (adminPassword.length < 12 || secret.length < 32)) {
     throw new Error(
-      'Set BOOKSEER_ADMIN_PASSWORD (at least 12 characters) and BOOKSEER_SESSION_SECRET (at least 32 characters). See .env.example.',
+      'Set BOOKSEERR_ADMIN_PASSWORD (at least 12 characters) and BOOKSEERR_SESSION_SECRET (at least 32 characters). See .env.example.',
     );
   }
   return {
-    port: integer(env.PORT || env.BOOKSEER_PORT, 5057, 1, 65535),
+    port: integer(env.PORT || env.BOOKSEERR_PORT, 5057, 1, 65535),
     host: env.HOST || '127.0.0.1',
-    dataDir: resolve(env.BOOKSEER_DATA_DIR || './data'),
-    adminUsername: env.BOOKSEER_ADMIN_USERNAME || 'admin',
+    dataDir: resolve(env.BOOKSEERR_DATA_DIR || './data'),
+    adminUsername: env.BOOKSEERR_ADMIN_USERNAME || 'admin',
     adminPassword,
     secret,
     demo,
-    publicUrl: validateServiceUrl(env.BOOKSEER_PUBLIC_URL || ''),
-    secureCookies: env.BOOKSEER_SECURE_COOKIES === 'true',
-    syncIntervalMinutes: integer(env.BOOKSEER_SYNC_INTERVAL_MINUTES, 30, 1, 1440),
-    inventoryMaxAgeHours: integer(env.BOOKSEER_INVENTORY_MAX_AGE_HOURS, 24, 1, 720),
+    publicUrl: validateServiceUrl(env.BOOKSEERR_PUBLIC_URL || ''),
+    secureCookies: env.BOOKSEERR_SECURE_COOKIES === 'true',
+    syncIntervalMinutes: integer(env.BOOKSEERR_SYNC_INTERVAL_MINUTES, 30, 1, 1440),
+    inventoryMaxAgeHours: integer(env.BOOKSEERR_INVENTORY_MAX_AGE_HOURS, 24, 1, 720),
     contact: env.OPEN_LIBRARY_CONTACT || '',
     connections: {
       bookorbitUrl: validateServiceUrl(env.BOOKORBIT_URL || ''),

@@ -4,12 +4,12 @@ const template = await readFile(new URL('../.env.example', import.meta.url), 'ut
 const password = randomBytes(24).toString('base64url');
 const key = randomBytes(32).toString('hex');
 const output = template
-  .replace('BOOKSEER_ADMIN_PASSWORD=\n', `BOOKSEER_ADMIN_PASSWORD=${password}\n`)
-  .replace('BOOKSEER_SESSION_SECRET=\n', `BOOKSEER_SESSION_SECRET=${key}\n`);
+  .replace('BOOKSEERR_ADMIN_PASSWORD=\n', `BOOKSEERR_ADMIN_PASSWORD=${password}\n`)
+  .replace('BOOKSEERR_SESSION_SECRET=\n', `BOOKSEERR_SESSION_SECRET=${key}\n`);
 try {
   await writeFile(new URL('../.env', import.meta.url), output, { mode: 0o600, flag: 'wx' });
   console.log(
-    'Created a private .env with independent random credentials. Read BOOKSEER_ADMIN_PASSWORD in that file to sign in.',
+    'Created a private .env with independent random credentials. Read BOOKSEERR_ADMIN_PASSWORD in that file to sign in.',
   );
 } catch (error) {
   if (error.code === 'EEXIST') {

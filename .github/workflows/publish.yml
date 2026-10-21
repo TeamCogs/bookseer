@@ -29,6 +29,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/teamcogs/bookseer:latest
-            ghcr.io/teamcogs/bookseer:sha-${{ github.sha }}
+            ghcr.io/teamcogs/bookseerr:latest
+            ghcr.io/teamcogs/bookseerr:sha-${{ github.sha }}
           labels: org.opencontainers.image.revision=${{ github.sha }}

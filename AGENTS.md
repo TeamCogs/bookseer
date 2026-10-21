@@ -1,4 +1,4 @@
-# Bookseer working instructions
+# Bookseerr working instructions
 
 - Docker and NAS deployments are the primary product. Avoid vendor-specific paths, credentials, or network assumptions in source, fixtures, screenshots, and documentation.
 - Integrate with official Chaptarr/chaptarr through its HTTP API. Keep upstream acquisition, import, and library-management responsibilities upstream.
