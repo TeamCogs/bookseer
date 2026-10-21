@@ -47,7 +47,7 @@ Successful complete inventory snapshots establish availability. A failed or part
 
 ## Status and validation
 
-This is an actively developed independent project. Automated tests cover account boundaries, request safety, matching, grouping, persistence, and upstream HTTP contracts. CI builds and runs the hardened production container on x86-64 and ARM64. Live BookOrbit inventory and ownership have been exercised against a large library. **The Chaptarr adapter still requires a recorded live acquisition/import verification**; contract tests alone do not establish it. Check the workflow for the revision you deploy.
+This is an actively developed independent project. Automated tests cover account boundaries, request safety, matching, grouping, persistence, and upstream HTTP contracts. CI builds and runs the hardened production container on x86-64 and ARM64. A live Docker deployment has verified existing BookOrbit ownership and a public-domain ebook request through official Chaptarr, qBittorrent, automatic import, and BookOrbit inventory. The download used a labelled test source rather than a public tracker search result. See the [live verification record and limits](docs/validation.md), and check the workflow for the revision you deploy.
 
 See [implemented features and verification scope](docs/features.md). Bookseerr does not claim all Seerr features: external notification delivery, SSO, reading sync, ebook conversion, and indexer management are not implemented.
 
