@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+data/
+.bookseer/
+coverage/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.log
+.DS_Store
+artifacts/private/
+
