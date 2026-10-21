@@ -1,0 +1,14 @@
+.git
+node_modules
+dist
+.env
+.env.*
+!.env.example
+data
+.bookseer
+coverage
+artifacts
+*.sqlite*
+*.db*
+*.log
+.DS_Store

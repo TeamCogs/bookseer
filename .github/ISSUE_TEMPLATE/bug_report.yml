@@ -1,0 +1,28 @@
+name: Bug report
+description: Report a reproducible Bookseer problem
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe what you expected and what happened instead. Do not include passwords, keys, private configuration, or database files.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Bookseer version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: deployment
+    attributes:
+      label: Deployment and reproduction
+      description: NAS/server platform, CPU architecture, Docker version, upstream versions, and steps to reproduce. Remove private hostnames and addresses.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized error or screenshot
+      description: Include only the minimum relevant output. Redact secrets and private reading information.

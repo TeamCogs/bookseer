@@ -1,0 +1,7 @@
+# Use after the published container has been made public and a version selected.
+# docker compose -f compose.yaml -f deploy/compose.image.yaml pull
+# docker compose -f compose.yaml -f deploy/compose.image.yaml up -d --no-build
+services:
+  bookseer:
+    image: ghcr.io/teamcogs/bookseer:${BOOKSEER_IMAGE_TAG:-latest}
+    pull_policy: always

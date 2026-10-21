@@ -1,0 +1,52 @@
+name: Verify Bookseer
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+  container:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: docker build -t bookseer:test .
+      - name: Create isolated credentials
+        run: |
+          echo "BOOKSEER_ADMIN_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+          echo "BOOKSEER_SESSION_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Run hardened container
+        run: |
+          docker volume create bookseer-test
+          docker run -d --name bookseer --read-only --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:rw,noexec,nosuid,size=64m -p 127.0.0.1:5057:5057 -v bookseer-test:/data -e BOOKSEER_ADMIN_PASSWORD -e BOOKSEER_SESSION_SECRET bookseer:test
+          for attempt in $(seq 1 30); do curl -fsS http://127.0.0.1:5057/api/health && exit 0; sleep 2; done
+          docker logs bookseer
+          exit 1
+      - run: node scripts/docker-smoke.mjs
+      - name: Verify persistence after restart
+        run: |
+          docker restart bookseer
+          for attempt in $(seq 1 30); do curl -fsS http://127.0.0.1:5057/api/health && break; sleep 2; done
+          node scripts/docker-smoke.mjs
+          test "$(docker exec bookseer id -u)" != 0
+      - name: Container diagnostics
+        if: failure()
+        run: docker logs bookseer

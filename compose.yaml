@@ -1,0 +1,32 @@
+services:
+  bookseer:
+    image: bookseer:local
+    build:
+      context: .
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 5057
+      BOOKSEER_DATA_DIR: /data
+      BOOKSEER_ADMIN_PASSWORD: ${BOOKSEER_ADMIN_PASSWORD:?Generate a private admin password in .env}
+      BOOKSEER_SESSION_SECRET: ${BOOKSEER_SESSION_SECRET:?Generate a private encryption key in .env}
+    ports:
+      - "${BOOKSEER_BIND_ADDRESS:-0.0.0.0}:${BOOKSEER_PORT:-5057}:5057"
+    volumes:
+      - bookseer_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  bookseer_data:

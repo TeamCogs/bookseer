@@ -1,0 +1,29 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { groupInventory, bookResult, itemAsBook } from '../server/matching.js';
+import { Store } from '../server/store.js';
+import { item, book } from './fixtures.js';
+
+test('dedupe combines filenames, ebook/audio, editions and sources while retaining every copy', () => {
+  const copies = [item, { ...item, id: 'b', title: book.title, author: book.author, formats: ['PDF'] }, { ...item, id: 'c', source: 'chaptarr' as const, mediaKind: 'audiobook' as const, formats: ['M4B'] }];
+  const groups = groupInventory(copies); assert.equal(groups.length, 1); assert.equal(groups[0].copies.length, 3); assert.equal(groups[0].duplicates, 1);
+});
+test('dedupe preserves parts, volumes, collections, distinct authors and incomplete identity', () => {
+  const copies = [item, { ...item, id: 'part', title: 'Oathbringer Part One' }, { ...item, id: 'box', title: 'Oathbringer Collection' }, { ...item, id: 'author', author: 'Different Author' }, { ...item, id: 'unknown1', title: 'Untitled', author: '' }, { ...item, id: 'unknown2', title: 'Untitled', author: '' }];
+  assert.equal(groupInventory(copies).length, 6);
+});
+test('saved library groups use the preferred title, improve format availability, and can be undone without touching inventory', () => {
+  const store = new Store(':memory:');
+  try {
+    const actor = store.addUser({ username: 'admin', displayName: 'Admin', passwordHash: 'test', role: 'admin', autoApprove: true, weeklyLimit: 0 });
+    const alternate = { ...item, id: 'alternate', title: 'An alternative edition title', mediaKind: 'audiobook' as const, formats: ['M4B'] };
+    store.replaceInventory('bookorbit', [item, alternate]);
+    assert.equal(groupInventory(store.inventory()).length, 2);
+    const id = store.groupLibrary([item.id, alternate.id], item.id, actor.id);
+    const groups = groupInventory(store.inventory(), store.libraryGroups()); assert.equal(groups.length, 1); assert.equal(groups[0].primary.id, item.id);
+    assert.equal(bookResult(itemAsBook(item), store, 24).availability.audiobook.status, 'available');
+    assert.equal(bookResult(book, store, 24).availability.audiobook.status, 'available');
+    store.db.prepare('DELETE FROM library_groups WHERE id=?').run(id);
+    assert.equal(groupInventory(store.inventory(), store.libraryGroups()).length, 2); assert.equal(store.inventory().length, 2);
+  } finally { store.close(); }
+});
