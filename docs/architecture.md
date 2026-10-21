@@ -24,6 +24,8 @@ Public registration is closed. Users cannot change their own role, quota, approv
 
 Ebooks and audiobooks are independent. A monitored Chaptarr record is not a file. BookOrbit records marked missing are not available copies. A full recent inventory must support a negative ownership result before Bookseer sends an acquisition request.
 
+Chaptarr may create an author's unmonitored catalogue during a single-book add. Bookseer reads the complete response but excludes catalogue-only records with no files and no active monitoring. Existing files remain included even if their Chaptarr monitoring is disabled. Actively tracked books without files remain visible with unavailable format badges.
+
 Matching checks normalized title and author, validated ISBNs, and provider work identities. Filename prefixes such as `Author, First - Series 03 - Title.epub` are normalized for display and matching. Parts, volumes, and collections are kept distinct. Related or conflicting metadata requires an administrator's persistent identity decision. Confirming identity does not invent a missing file. Dismissing a possible match applies only to the reviewed item, not future copies.
 
 Each source commits its inventory as one SQLite transaction after all pages have been validated. Repeated IDs, changing totals, missing pages, inaccessible selected libraries, malformed responses, and authentication failures retain the previous snapshot. A failed or expired source cannot prove absence. Previously seen copies remain visible with unverified availability. Startup requires a fresh source check before trusting a previous snapshot.

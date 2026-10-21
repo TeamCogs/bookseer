@@ -163,6 +163,11 @@ assert.ok(
 );
 if (outcome?.id)
   assert.equal(monitoredBooks.length, 1, 'A completed native add must monitor its requested book.');
+assert.equal(
+  books.length,
+  monitoredBooks.length,
+  'Unmonitored author catalogue records without files must stay out of the connected library.',
+);
 console.log(
   JSON.stringify({
     upstreamVersion: version.version,

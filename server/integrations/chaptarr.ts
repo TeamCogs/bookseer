@@ -60,7 +60,13 @@ export class Chaptarr {
     );
   }
   async inventory(): Promise<LibraryItem[]> {
-    return array(await this.json('/book?include=author')).map((book) => this.map(book));
+    return array(await this.json('/book?include=author'))
+      .map((book) => ({ book, item: this.map(book) }))
+      .filter(
+        ({ book, item }) =>
+          item.available || book.monitored === true || book[item.mediaKind + 'Monitored'] === true,
+      )
+      .map(({ item }) => item);
   }
   map(book: Record<string, any>): LibraryItem {
     if (

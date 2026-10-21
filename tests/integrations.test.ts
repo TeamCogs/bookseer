@@ -120,6 +120,26 @@ test('Chaptarr inventory requests authors and hasFiles overrides monitored flags
   assert.equal(result[0].author, book.author);
   assert.deepEqual(result[0].identifiers.work, ['ol:OL20158882W']);
 });
+
+test('Chaptarr inventory excludes unowned author catalogue entries while retaining monitored records and unmonitored files', async (t) => {
+  const c = config().connections;
+  Object.assign(c, { chaptarrUrl: 'http://chaptarr.test', chaptarrApiKey: 'key' });
+  const base = { title: book.title, author: { authorName: book.author }, mediaType: 'ebook' };
+  t.mock.method(globalThis, 'fetch', async () =>
+    json([
+      { ...base, id: 1, hasFiles: false, monitored: false, ebookMonitored: false },
+      { ...base, id: 2, hasFiles: false, monitored: true },
+      { ...base, id: 3, hasFiles: true, monitored: false },
+    ]),
+  );
+  const items = await new Chaptarr(c).inventory();
+  assert.deepEqual(
+    items.map((item) => item.remoteId),
+    ['2', '3'],
+  );
+  assert.equal(items[0].available, false);
+  assert.equal(items[1].available, true);
+});
 test('dispatch uses official scoped book lookup/add/search, coalesces concurrency, and never retries a 202 add', async (t) => {
   const c = config();
   Object.assign(c.connections, {
