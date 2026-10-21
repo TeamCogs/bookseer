@@ -203,20 +203,19 @@ export async function buildApp(
   ) => {
     const value = bookResult(book, store, config.inventoryMaxAgeHours, items, copies);
     if (viewer) {
-      const summaries = store.db
-        .prepare(
-          'SELECT id,media_kind,status,EXISTS(SELECT 1 FROM followers WHERE request_id=requests.id AND user_id=?) AS following FROM requests WHERE catalog_id=?',
-        )
-        .all(viewer.id, book.id) as {
-        id: string;
-        media_kind: MediaKind;
-        status: BookRequest['status'];
-        following: number;
-      }[];
+      const summaries = store.relatedRequests(book);
       value.requests = Object.fromEntries(
-        summaries.map((r) => [
-          r.media_kind,
-          { id: r.id, status: r.status, following: Boolean(r.following) },
+        summaries.reverse().map((r) => [
+          String(r.media_kind),
+          {
+            id: String(r.id),
+            status: r.status as BookRequest['status'],
+            following: Boolean(
+              store.db
+                .prepare('SELECT 1 FROM followers WHERE request_id=? AND user_id=?')
+                .get(String(r.id), viewer.id),
+            ),
+          },
         ]),
       );
     }

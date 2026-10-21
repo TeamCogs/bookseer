@@ -46,6 +46,11 @@ export function displayTitle(value: string, author: string): string {
   }
   return title;
 }
+export function catalogueIdentity(book: CatalogBook): string {
+  const title = normalizeText(displayTitle(book.title, book.author));
+  const author = normalizeAuthor(book.author);
+  return title && author && completeAuthor(author) ? `${title}|${author}` : '';
+}
 export function normalizeIsbn(value: string): string | undefined {
   const isbn = value.toUpperCase().replace(/[^0-9X]/g, '');
   if (/^\d{13}$/.test(isbn)) {

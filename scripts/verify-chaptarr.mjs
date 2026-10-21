@@ -90,6 +90,24 @@ const request = {
 };
 let outcome;
 let acceptedPending = false;
+console.log(
+  'Fixture native lookup:',
+  JSON.stringify({ title: request.title, author: request.author, work: request.identifiers.work }),
+);
+const canonical = await api(
+  `/book/lookup?term=${encodeURIComponent(candidate.foreignBookId)}&mediaType=ebook`,
+);
+console.log(
+  'Fixture canonical lookup:',
+  JSON.stringify(
+    canonical.map((entry) => ({
+      title: entry.title,
+      author: entry.author?.authorName,
+      mediaType: entry.mediaType,
+      foreignBookId: entry.foreignBookId,
+    })),
+  ),
+);
 try {
   outcome = await adapter.submit(request, 'ebook', () => {});
 } catch (error) {

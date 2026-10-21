@@ -57,6 +57,39 @@ test('dedupe preserves parts, volumes, collections, distinct authors and incompl
   ];
   assert.equal(groupInventory(copies).length, 6);
 });
+
+test('local and online identities share one format request, follower list, and reacquisition record', () => {
+  const store = new Store(':memory:');
+  try {
+    const actor = store.addUser({
+      username: 'reader',
+      displayName: 'Reader',
+      passwordHash: 'test',
+      role: 'user',
+      autoApprove: false,
+      weeklyLimit: 3,
+    });
+    const local = itemAsBook(item);
+    store.saveBook(book);
+    store.saveBook(local);
+    const first = store.createRequest(book, 'audiobook', actor);
+    const second = store.createRequest(local, 'audiobook', actor);
+    assert.equal(second.id, first.id);
+    assert.equal(second.created, false);
+    assert.equal(store.requestsFor(actor).length, 1);
+    assert.equal(store.relatedRequests(local)[0].id, first.id);
+    store.updateRequest(first.id, 'available', 'Available.');
+    const again = store.createRequest(local, 'audiobook', actor);
+    assert.equal(again.id, first.id);
+    assert.equal(again.created, true);
+    assert.equal(store.requestsFor(actor).length, 1);
+    const part = { ...book, id: 'ol:part', title: 'Oathbringer Part One' };
+    store.saveBook(part);
+    assert.notEqual(store.createRequest(part, 'audiobook', actor).id, first.id);
+  } finally {
+    store.close();
+  }
+});
 test('saved library groups use the preferred title, improve format availability, and can be undone without touching inventory', () => {
   const store = new Store(':memory:');
   try {

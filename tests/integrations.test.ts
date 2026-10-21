@@ -144,17 +144,18 @@ test('dispatch uses official scoped book lookup/add/search, coalesces concurrenc
   });
   const writes: { path: string; body: any }[] = [];
   let pending = false;
+  let lookupBook = book;
   t.mock.method(globalThis, 'fetch', async (input: string, init: RequestInit) => {
     const url = new URL(String(input));
     if (url.pathname.endsWith('/book') && init.method === 'GET') return json([]);
     if (url.pathname.endsWith('/lookup')) {
       assert.equal(url.searchParams.get('mediaType'), 'ebook');
-      assert.equal(url.searchParams.get('term'), book.identifiers.work[0]);
+      assert.equal(url.searchParams.get('term'), lookupBook.identifiers.work[0]);
       return json([
         {
           id: 0,
-          title: book.title,
-          foreignBookId: book.identifiers.work[0],
+          title: lookupBook.title,
+          foreignBookId: lookupBook.identifiers.work[0],
           author: { authorName: book.author, foreignAuthorId: 'ol:OL23919A' },
           localEbookBooks: [],
         },
@@ -180,7 +181,13 @@ test('dispatch uses official scoped book lookup/add/search, coalesces concurrenc
     assert.equal(writes.length, 2);
     assert.equal(store.request(request.id)?.status, 'requested');
     pending = true;
-    const other = { ...book, id: 'ol:other' };
+    const other = {
+      ...book,
+      id: 'ol:other',
+      title: 'Another Book',
+      identifiers: { isbn: [], work: ['ol:other'] },
+    };
+    lookupBook = other;
     store.saveBook(other);
     const uncertain = store.createRequest(other, 'ebook', actor);
     await services.dispatch(uncertain.id);
@@ -617,4 +624,36 @@ test('Chaptarr cover proxy authenticates only local cover resources and rejects 
   external = true;
   await assert.rejects(adapter.cover(copy), /not a local cover resource/);
   assert.equal(imageReads, 1);
+});
+
+test('canonical Goodreads identity supports edition subtitles and expanded author names while rejecting a conflicting author', async (t) => {
+  const c = config().connections;
+  Object.assign(c, {
+    chaptarrUrl: 'http://chaptarr.test',
+    chaptarrApiKey: 'key',
+    ebookRootFolder: '/ebooks',
+    ebookQualityProfileId: 1,
+    ebookMetadataProfileId: 1,
+  });
+  const requested = {
+    ...book,
+    title: 'Frankenstein',
+    author: 'Mary Shelley',
+    identifiers: { isbn: [], work: ['gr:321'] },
+  };
+  let author = 'Mary Wollstonecraft Shelley';
+  t.mock.method(globalThis, 'fetch', async () =>
+    json([
+      {
+        title: 'Frankenstein; or, The Modern Prometheus',
+        author: { authorName: author },
+        foreignBookId: 'hc:999',
+        goodreadsWorkId: 'gr:321',
+      },
+    ]),
+  );
+  const adapter = new Chaptarr(c);
+  assert.equal((await adapter.lookup(requested, 'ebook')).foreignBookId, 'hc:999');
+  author = 'A Different Author';
+  await assert.rejects(adapter.lookup(requested, 'ebook'), /unique matching work/);
 });

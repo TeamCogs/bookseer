@@ -15,6 +15,7 @@ import type {
   User,
 } from '../shared/types.js';
 import { readerRequestMessage } from '../shared/messages.js';
+import { catalogueIdentity } from './matching.js';
 import { digest, token } from './security.js';
 
 export class Store {
@@ -290,11 +291,24 @@ export class Store {
     return this.db.prepare('SELECT * FROM requests WHERE id=?').get(id) as
       Record<string, unknown> | undefined;
   }
+  relatedRequests(book: CatalogBook) {
+    const identity = catalogueIdentity(book);
+    return (
+      this.db
+        .prepare(
+          "SELECT r.*, c.payload AS book_payload FROM requests r JOIN catalogue c ON c.id=r.catalog_id ORDER BY CASE WHEN r.status IN ('available','cancelled','rejected') THEN 1 ELSE 0 END, r.created_at DESC",
+        )
+        .all() as Record<string, unknown>[]
+    ).filter(
+      (row) =>
+        row.catalog_id === book.id ||
+        (identity && catalogueIdentity(JSON.parse(String(row.book_payload))) === identity),
+    );
+  }
   createRequest(book: CatalogBook, kind: MediaKind, user: User): { id: string; created: boolean } {
     return this.transaction(() => {
-      const existing = this.db
-        .prepare('SELECT id,status FROM requests WHERE catalog_id=? AND media_kind=?')
-        .get(book.id, kind) as { id: string; status: RequestStatus } | undefined;
+      const existing = this.relatedRequests(book).find((row) => row.media_kind === kind) as
+        { id: string; catalog_id: string; status: RequestStatus } | undefined;
       if (existing && existing.status !== 'available') {
         this.db.prepare('INSERT OR IGNORE INTO followers VALUES(?,?)').run(existing.id, user.id);
         return { id: existing.id, created: false };
@@ -316,7 +330,7 @@ export class Store {
         )
         .run(
           id,
-          book.id,
+          existing?.catalog_id || book.id,
           kind,
           user.id,
           approved ? 'pending_setup' : 'pending_approval',

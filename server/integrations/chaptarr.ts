@@ -211,15 +211,31 @@ export class Chaptarr {
               ? candidate.hardcoverBookId
               : `hc:${candidate.hardcoverBookId}`
             : null,
+          candidate.goodreadsWorkId
+            ? String(candidate.goodreadsWorkId).startsWith('gr:')
+              ? candidate.goodreadsWorkId
+              : `gr:${candidate.goodreadsWorkId}`
+            : null,
         ],
       ).work;
       const sameWork = candidateWork.some((id) => book.identifiers.work.includes(id));
+      const candidateAuthor = normalizeAuthor(
+        candidate.author?.authorName || candidate.author?.name || '',
+      );
+      const requestedAuthor = normalizeAuthor(book.author);
+      const a = candidateAuthor.split(' ');
+      const b = requestedAuthor.split(' ');
+      const sameAuthor =
+        candidateAuthor === requestedAuthor ||
+        (sameWork &&
+          a.length >= 2 &&
+          b.length >= 2 &&
+          (a.every((word) => b.includes(word)) || b.every((word) => a.includes(word))));
       return (
         (sameTitle || (sameWork && compatibleExtent(book.title, candidate.title || ''))) &&
         Boolean(normalizeText(book.title)) &&
         Boolean(normalizeAuthor(book.author)) &&
-        normalizeAuthor(candidate.author?.authorName || candidate.author?.name || '') ===
-          normalizeAuthor(book.author)
+        sameAuthor
       );
     });
     if (matches.length !== 1)

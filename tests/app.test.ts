@@ -324,6 +324,35 @@ test('local shelf search stays independent of online metadata availability', asy
     await ctx.close();
   }
 });
+
+test('online and local versions show and join the same missing-format request', async () => {
+  const ctx = await setup();
+  try {
+    const headers = await ctx.login();
+    const request = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/requests',
+      headers,
+      payload: { catalogId: book.id, mediaKind: 'audiobook' },
+    });
+    assert.equal(request.statusCode, 201, request.body);
+    const library = await ctx.app.inject({ url: '/api/library?q=Oathbringer', headers });
+    const local = library.json().items[0];
+    assert.equal(local.requests.audiobook.id, request.json().request.id);
+    assert.equal(local.requests.audiobook.following, true);
+    const joined = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/requests',
+      headers,
+      payload: { catalogId: local.book.id, mediaKind: 'audiobook' },
+    });
+    assert.equal(joined.statusCode, 200, joined.body);
+    assert.equal(joined.json().request.id, request.json().request.id);
+    assert.equal((await ctx.app.inject({ url: '/api/requests', headers })).json().items.length, 1);
+  } finally {
+    await ctx.close();
+  }
+});
 test('readers can leave a shared request without cancelling another reader’s request', async () => {
   const ctx = await setup();
   try {
