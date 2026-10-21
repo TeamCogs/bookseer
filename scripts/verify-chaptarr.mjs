@@ -1,7 +1,7 @@
 // This script mutates only the throwaway official Chaptarr container created by
 // chaptarr.yml. It must never be pointed at a household or production library.
 import assert from 'node:assert/strict';
-import { Chaptarr } from '../dist/server/integrations/chaptarr.js';
+import { Chaptarr, PendingAddError } from '../dist/server/integrations/chaptarr.js';
 import { loadConfig } from '../dist/server/config.js';
 const base = process.env.CHAPTARR_URL;
 assert.equal(base, 'http://127.0.0.1:8789', 'Only the isolated workflow endpoint is accepted.');
@@ -84,13 +84,15 @@ const request = {
   identifiers: { isbn: [], work: [candidate.foreignBookId] },
 };
 let outcome;
+let acceptedPending = false;
 try {
   outcome = await adapter.submit(request, 'ebook', () => {});
 } catch (error) {
-  if (!/pending or unexpected add response/.test(error.message)) throw error;
-  // A pending response is an explicitly supported safe outcome, not a confirmed add.
+  if (!(error instanceof PendingAddError)) throw error;
+  acceptedPending = true;
+  // Acceptance is not proof that upstream created or imported a book.
   console.log(
-    'Official upstream returned an asynchronous pending response; Bookseer correctly requires review and does not replay it.',
+    'Official upstream accepted an asynchronous addition. Bookseer tracks it without repeating the add; completed acquisition remains unverified.',
   );
 }
 const books = await adapter.inventory();
@@ -112,7 +114,7 @@ console.log(
     upstreamVersion: version.version,
     lookup: true,
     nativeAdd: Boolean(outcome?.id),
-    safePending: !outcome,
+    acceptedPending,
     inventoryBooks: books.length,
     formatScoped: true,
     filePresence: true,

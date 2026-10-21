@@ -21,6 +21,31 @@ test('dedupe combines filenames, ebook/audio, editions and sources while retaini
   assert.equal(groups[0].copies.length, 3);
   assert.equal(groups[0].duplicates, 1);
 });
+test('a fulfilled request can reacquire a missing copy while retaining a fair rolling quota', () => {
+  const store = new Store(':memory:');
+  try {
+    store.saveBook(book);
+    const actor = store.addUser({
+      username: 'reader',
+      displayName: 'Reader',
+      passwordHash: 'test',
+      role: 'user',
+      autoApprove: false,
+      weeklyLimit: 2,
+    });
+    const first = store.createRequest(book, 'ebook', actor);
+    store.updateRequest(first.id, 'available', 'Available.');
+    const second = store.createRequest(book, 'ebook', actor);
+    assert.equal(second.id, first.id);
+    assert.equal(second.created, true);
+    assert.equal(store.request(first.id)?.status, 'pending_approval');
+    store.updateRequest(first.id, 'available', 'Available again.');
+    assert.throws(() => store.createRequest(book, 'ebook', actor), /weekly request limit/);
+    assert.equal(store.requestsFor(actor).length, 1);
+  } finally {
+    store.close();
+  }
+});
 test('dedupe preserves parts, volumes, collections, distinct authors and incomplete identity', () => {
   const copies = [
     item,

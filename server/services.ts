@@ -2,7 +2,7 @@ import type { MediaKind, Source, User } from '../shared/types.js';
 import type { Config, ConnectionConfig } from './config.js';
 import type { Store } from './store.js';
 import { BookOrbit } from './integrations/bookorbit.js';
-import { Chaptarr, LookupPendingError } from './integrations/chaptarr.js';
+import { Chaptarr, LookupPendingError, PendingAddError } from './integrations/chaptarr.js';
 import { OpenLibrary } from './integrations/openlibrary.js';
 import { bookResult } from './matching.js';
 import { decrypt, encrypt } from './security.js';
@@ -137,7 +137,24 @@ export class Services {
   async dispatch(id: string): Promise<void> {
     if (this.stopping || this.dispatching.has(id) || this.config.demo) return;
     const request = this.store.request(id);
-    if (!request || !['pending_setup', 'pending_metadata'].includes(String(request.status))) return;
+    if (
+      !request ||
+      !['pending_setup', 'pending_metadata', 'pending_upstream'].includes(String(request.status))
+    )
+      return;
+    const pendingKey = `pending_add:${id}`;
+    const savedPending = this.store.setting(pendingKey);
+    const pending = savedPending
+      ? (JSON.parse(savedPending) as { pendingId: number; createdAt: number })
+      : undefined;
+    if (pending && Date.now() - pending.createdAt > 6 * 3600000) {
+      this.store.updateRequest(
+        id,
+        'needs_review',
+        'Chaptarr accepted the addition but it has not resolved after six hours. Check its pending operations before reopening.',
+      );
+      return;
+    }
     const retryKey = `lookup_retry:${id}`;
     const savedRetry = this.store.setting(retryKey);
     const retry = savedRetry
@@ -180,13 +197,23 @@ export class Services {
     }
     const reserved = this.store.db
       .prepare(
-        "UPDATE requests SET status='checking',message='Resolving metadata and checking connected inventories.',updated_at=? WHERE id=? AND status IN ('pending_setup','pending_metadata')",
+        "UPDATE requests SET status='checking',message='Resolving metadata and checking connected inventories.',updated_at=? WHERE id=? AND status IN ('pending_setup','pending_metadata','pending_upstream')",
       )
       .run(new Date().toISOString(), id);
     if (!reserved.changes) return;
     this.dispatching.add(id);
     try {
       const resolved = await this.chaptarr.lookup(book, kind);
+      if (this.stopping || this.store.request(id)?.status !== 'checking') return;
+      if (
+        pending &&
+        !(kind === 'ebook' ? resolved.localEbookBooks : resolved.localAudiobookBooks)?.some(
+          (copy: { id: number }) => Number.isSafeInteger(copy.id) && copy.id > 0,
+        )
+      )
+        throw new LookupPendingError(
+          'Waiting for the accepted Chaptarr addition to create its local instance.',
+        );
       await Promise.all([this.sync('bookorbit'), this.sync('chaptarr')]);
       if (this.stopping || this.store.request(id)?.status !== 'checking') return;
       const checked = bookResult(book, this.store, this.config.inventoryMaxAgeHours).availability[
@@ -231,8 +258,10 @@ export class Services {
             );
         },
         resolved,
+        !pending,
       );
       this.store.setSetting(retryKey, '');
+      this.store.setSetting(pendingKey, '');
       this.store.updateRequest(
         id,
         result.available ? 'available' : 'requested',
@@ -247,7 +276,29 @@ export class Services {
         this.store.request(id)?.status === 'rejected'
       )
         return;
-      if (error instanceof LookupPendingError && retry.attempts < 6) {
+      if (this.stopping && this.store.request(id)?.status === 'checking') {
+        this.store.updateRequest(
+          id,
+          'pending_setup',
+          'Verification interrupted by shutdown; it will resume safely.',
+        );
+        return;
+      }
+      if (error instanceof PendingAddError) {
+        this.store.transaction(() => {
+          this.store.setSetting(
+            pendingKey,
+            JSON.stringify({ pendingId: error.pendingId, createdAt: Date.now() }),
+          );
+          this.store.updateRequest(
+            id,
+            'pending_upstream',
+            'Chaptarr accepted the addition. Waiting for its local book record; the add will not be repeated.',
+          );
+        });
+        return;
+      }
+      if (error instanceof LookupPendingError && (pending || retry.attempts < 6)) {
         const attempts = retry.attempts + 1;
         this.store.setSetting(
           retryKey,
@@ -258,8 +309,10 @@ export class Services {
         );
         this.store.updateRequest(
           id,
-          'pending_metadata',
-          'Waiting for Chaptarr metadata. Lookup will retry automatically before any book is added.',
+          pending ? 'pending_upstream' : 'pending_metadata',
+          pending
+            ? 'Waiting for the accepted Chaptarr addition. Only its status is being checked; no new add is sent.'
+            : 'Waiting for Chaptarr metadata. Lookup will retry automatically before any book is added.',
         );
         return;
       }
@@ -276,7 +329,7 @@ export class Services {
     if (this.stopping || this.config.demo) return;
     const active = this.store.db
       .prepare(
-        "SELECT * FROM requests WHERE status IN ('pending_setup','pending_metadata','requested','downloading','importing','needs_review')",
+        "SELECT * FROM requests WHERE status IN ('pending_setup','pending_metadata','pending_upstream','requested','downloading','importing','needs_review')",
       )
       .all() as Record<string, unknown>[];
     if (!active.length) return;
@@ -301,6 +354,7 @@ export class Services {
         ![
           'pending_setup',
           'pending_metadata',
+          'pending_upstream',
           'requested',
           'downloading',
           'importing',
@@ -317,7 +371,9 @@ export class Services {
         this.store.updateRequest(id, 'available', 'Available in your connected library.');
         continue;
       }
-      if (['pending_setup', 'pending_metadata'].includes(String(request.status))) {
+      if (
+        ['pending_setup', 'pending_metadata', 'pending_upstream'].includes(String(request.status))
+      ) {
         this.enqueue(id);
         continue;
       }

@@ -186,7 +186,7 @@ test('dispatch uses official scoped book lookup/add/search, coalesces concurrenc
     await services.dispatch(uncertain.id);
     await services.dispatch(uncertain.id);
     assert.equal(writes.length, 3);
-    assert.equal(store.request(uncertain.id)?.status, 'needs_review');
+    assert.equal(store.request(uncertain.id)?.status, 'pending_upstream');
   } finally {
     store.close();
   }
@@ -379,7 +379,7 @@ test('metadata warmup retries only lookups with persistent backoff and never sen
   t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
     calls++;
     assert.equal(init.method, 'GET');
-    assert.ok(String(url).includes('/lookup'));
+    assert.ok(String(url).includes('/lookup') || String(url).includes('/search'));
     return json([]);
   });
   try {
@@ -389,6 +389,84 @@ test('metadata warmup retries only lookups with persistent backoff and never sen
     await services.dispatch(request.id);
     assert.equal(calls, 2);
     assert.ok(store.setting(`lookup_retry:${request.id}`));
+  } finally {
+    store.close();
+  }
+});
+test('accepted asynchronous additions resume by finding their local instance and never repeat the add', async (t) => {
+  const c = config();
+  Object.assign(c.connections, {
+    chaptarrUrl: 'http://chaptarr.test',
+    chaptarrApiKey: 'key',
+    ebookRootFolder: '/ebooks',
+    ebookQualityProfileId: 1,
+    ebookMetadataProfileId: 1,
+  });
+  const store = new Store(':memory:');
+  const services = new Services(c, store);
+  store.replaceInventory('chaptarr', []);
+  store.saveBook(book);
+  const actor = store.addUser({
+    username: 'owner',
+    displayName: 'Owner',
+    passwordHash: 'test',
+    role: 'admin',
+    autoApprove: true,
+    weeklyLimit: 0,
+  });
+  let ready = false;
+  let adds = 0;
+  let searches = 0;
+  t.mock.method(globalThis, 'fetch', async (input: string, init: RequestInit) => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith('/lookup'))
+      return json([
+        {
+          title: book.title,
+          author: { authorName: book.author },
+          foreignBookId: book.identifiers.work[0],
+          localEbookBooks: ready ? [{ id: 9, hasFiles: false, monitored: true }] : [],
+        },
+      ]);
+    if (path.endsWith('/book') && init.method === 'GET')
+      return json(
+        ready
+          ? [
+              {
+                id: 9,
+                title: book.title,
+                author: { authorName: book.author },
+                mediaType: 'ebook',
+                hasFiles: false,
+                monitored: true,
+              },
+            ]
+          : [],
+      );
+    if (path.endsWith('/book')) {
+      adds++;
+      return json({ pendingId: 12 }, 202);
+    }
+    if (path.endsWith('/command')) {
+      searches++;
+      assert.deepEqual(JSON.parse(String(init.body)).bookIds, [9]);
+      return json({ id: 3 });
+    }
+    throw new Error('Unexpected endpoint');
+  });
+  try {
+    const request = store.createRequest(book, 'ebook', actor);
+    await services.dispatch(request.id);
+    assert.equal(store.request(request.id)?.status, 'pending_upstream');
+    assert.ok(store.setting(`pending_add:${request.id}`));
+    await services.dispatch(request.id);
+    assert.equal(adds, 1);
+    ready = true;
+    store.setSetting(`lookup_retry:${request.id}`, '');
+    await services.dispatch(request.id);
+    assert.equal(store.request(request.id)?.status, 'requested');
+    assert.equal(adds, 1);
+    assert.equal(searches, 1);
   } finally {
     store.close();
   }
@@ -421,4 +499,75 @@ test('connection settings are encrypted and never returned as plaintext secrets'
   } finally {
     store.close();
   }
+});
+
+test('Chaptarr native Hardcover search resolves one matching work before a format-scoped lookup', async (t) => {
+  const c = config().connections;
+  Object.assign(c, {
+    chaptarrUrl: 'http://chaptarr.test',
+    chaptarrApiKey: 'key',
+    ebookRootFolder: '/ebooks',
+    ebookQualityProfileId: 1,
+    ebookMetadataProfileId: 1,
+  });
+  const calls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: string, init: RequestInit) => {
+    const url = new URL(String(input));
+    calls.push(url.pathname + url.search);
+    assert.equal(init.method, 'GET');
+    if (url.pathname.endsWith('/search')) {
+      assert.equal(url.searchParams.get('provider'), 'hardcover');
+      return json([
+        {
+          book: { title: book.title, author: { authorName: book.author }, foreignBookId: 'hc:321' },
+        },
+      ]);
+    }
+    assert.equal(url.searchParams.get('mediaType'), 'ebook');
+    return json(
+      url.searchParams.get('term') === 'hc:321'
+        ? [{ title: book.title, author: { authorName: book.author }, foreignBookId: 'hc:321' }]
+        : [],
+    );
+  });
+  assert.equal((await new Chaptarr(c).lookup(book, 'ebook')).foreignBookId, 'hc:321');
+  assert.equal(calls.length, 3);
+});
+
+test('Chaptarr cover proxy authenticates only local cover resources and rejects external image URLs', async (t) => {
+  const c = config().connections;
+  Object.assign(c, { chaptarrUrl: 'http://chaptarr.test', chaptarrApiKey: 'private-cover-key' });
+  const adapter = new Chaptarr(c);
+  const copy = adapter.map({
+    id: 4,
+    title: book.title,
+    author: { authorName: book.author },
+    mediaType: 'ebook',
+    hasFiles: true,
+    images: [{ coverType: 'cover', url: '/MediaCover/4/cover.jpg' }],
+  });
+  assert.ok(copy.coverUrl?.startsWith('/api/covers/chaptarr'));
+  let external = false;
+  let imageReads = 0;
+  t.mock.method(globalThis, 'fetch', async (input: string, init: RequestInit) => {
+    const url = new URL(String(input));
+    assert.equal(url.origin, 'http://chaptarr.test');
+    assert.equal((init.headers as Record<string, string>)['X-Api-Key'], 'private-cover-key');
+    if (url.pathname === '/api/v1/book/4')
+      return json({
+        images: [
+          {
+            coverType: 'cover',
+            url: external ? 'https://covers.other.test/cover.jpg' : '/MediaCover/4/cover.jpg',
+          },
+        ],
+      });
+    assert.equal(url.pathname, '/MediaCover/4/cover.jpg');
+    imageReads++;
+    return new Response(new Uint8Array([1, 2]), { headers: { 'Content-Type': 'image/jpeg' } });
+  });
+  assert.equal((await adapter.cover(copy)).headers.get('content-type'), 'image/jpeg');
+  external = true;
+  await assert.rejects(adapter.cover(copy), /not a local cover resource/);
+  assert.equal(imageReads, 1);
 });

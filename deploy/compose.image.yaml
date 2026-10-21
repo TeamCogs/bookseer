@@ -1,4 +1,4 @@
-# Use after the published container has been made public and a version selected.
+# Optional override to check for a newer public image on every startup.
 # docker compose -f compose.yaml -f deploy/compose.image.yaml pull
 # docker compose -f compose.yaml -f deploy/compose.image.yaml up -d --no-build
 services:

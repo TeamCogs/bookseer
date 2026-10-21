@@ -59,6 +59,7 @@ export type RequestStatus =
   | 'pending_approval'
   | 'pending_setup'
   | 'pending_metadata'
+  | 'pending_upstream'
   | 'checking'
   | 'submitting'
   | 'requested'

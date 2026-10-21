@@ -14,6 +14,7 @@ import type {
   SourceState,
   User,
 } from '../shared/types.js';
+import { readerRequestMessage } from '../shared/messages.js';
 import { digest, token } from './security.js';
 
 export class Store {
@@ -274,7 +275,10 @@ export class Store {
         createdAt: String(row.created_at),
         updatedAt: String(row.updated_at),
         upstreamId: row.upstream_id ? Number(row.upstream_id) : undefined,
-        message: String(row.message),
+        message:
+          user.role === 'admin'
+            ? String(row.message)
+            : readerRequestMessage(row.status as RequestStatus, String(row.message)),
         requestedBy: String(row.requested_by),
         requesterId: String(row.requester_id),
         followers: Number(row.followers),
@@ -289,23 +293,27 @@ export class Store {
   createRequest(book: CatalogBook, kind: MediaKind, user: User): { id: string; created: boolean } {
     return this.transaction(() => {
       const existing = this.db
-        .prepare('SELECT id FROM requests WHERE catalog_id=? AND media_kind=?')
-        .get(book.id, kind) as { id: string } | undefined;
-      if (existing) {
+        .prepare('SELECT id,status FROM requests WHERE catalog_id=? AND media_kind=?')
+        .get(book.id, kind) as { id: string; status: RequestStatus } | undefined;
+      if (existing && existing.status !== 'available') {
         this.db.prepare('INSERT OR IGNORE INTO followers VALUES(?,?)').run(existing.id, user.id);
         return { id: existing.id, created: false };
       }
       const since = new Date(Date.now() - 7 * 86400000).toISOString();
       const count = this.db
-        .prepare('SELECT COUNT(*) AS n FROM requests WHERE requester_id=? AND created_at>=?')
+        .prepare(
+          "SELECT COUNT(*) AS n FROM audit WHERE user_id=? AND action='request.created' AND created_at>=?",
+        )
         .get(user.id, since) as { n: number };
       if (user.role !== 'admin' && user.weeklyLimit > 0 && count.n >= user.weeklyLimit)
         throw new Error('Your weekly request limit has been reached.');
-      const id = randomUUID();
+      const id = existing?.id || randomUUID();
       const now = new Date().toISOString();
       const approved = user.role === 'admin' || user.autoApprove;
       this.db
-        .prepare('INSERT INTO requests VALUES(?,?,?,?,?,?,?,?,?)')
+        .prepare(
+          'INSERT INTO requests VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(catalog_id,media_kind) DO UPDATE SET requester_id=excluded.requester_id,status=excluded.status,upstream_id=NULL,message=excluded.message,created_at=excluded.created_at,updated_at=excluded.updated_at',
+        )
         .run(
           id,
           book.id,
@@ -319,7 +327,11 @@ export class Store {
           now,
           now,
         );
-      this.db.prepare('INSERT INTO followers VALUES(?,?)').run(id, user.id);
+      this.db.prepare('INSERT OR IGNORE INTO followers VALUES(?,?)').run(id, user.id);
+      if (existing) {
+        this.setSetting(`lookup_retry:${id}`, '');
+        this.setSetting(`pending_add:${id}`, '');
+      }
       this.audit(user.id, 'request.created', JSON.stringify({ id, catalogId: book.id, kind }));
       this.users()
         .filter((u) => u.role === 'admin' && !u.disabled)
@@ -342,11 +354,23 @@ export class Store {
         .prepare('SELECT user_id FROM followers WHERE request_id=?')
         .all(id) as { user_id: string }[];
       followers.forEach((f) =>
-        this.notify(f.user_id, `${book?.title || 'Your request'}: ${message}`, id),
+        this.notify(
+          f.user_id,
+          `${book?.title || 'Your request'}: ${this.user(f.user_id)?.role === 'admin' ? message : readerRequestMessage(status, message)}`,
+          id,
+        ),
       );
     }
   }
   notify(userId: string, message: string, requestId?: string) {
+    if (requestId) {
+      const last = this.db
+        .prepare(
+          'SELECT message FROM notifications WHERE user_id=? AND request_id=? ORDER BY id DESC LIMIT 1',
+        )
+        .get(userId, requestId) as { message: string } | undefined;
+      if (last?.message === message) return;
+    }
     this.db
       .prepare('INSERT INTO notifications(user_id,request_id,message,created_at) VALUES(?,?,?,?)')
       .run(userId, requestId ?? null, message, new Date().toISOString());

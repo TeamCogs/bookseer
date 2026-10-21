@@ -145,11 +145,20 @@ export function ConnectionsPage({
               Destination folder
               <select value={value?.[rootKey]} onChange={(e) => change(rootKey, e.target.value)}>
                 <option value="">Choose a destination · acquisition disabled</option>
-                {checks.chaptarr.roots.map((root) => (
-                  <option key={root.id} value={root.path}>
-                    {root.name || root.path} · {root.path}
-                  </option>
-                ))}
+                {checks.chaptarr.roots
+                  .filter(
+                    (root) =>
+                      root.type === undefined ||
+                      root.type === 0 ||
+                      root.type === (kind === 'ebook' ? 2 : 1) ||
+                      String(root.type).toLowerCase() === 'mixed' ||
+                      String(root.type).toLowerCase() === kind,
+                  )
+                  .map((root) => (
+                    <option key={root.id} value={root.path}>
+                      {root.name || root.path} · {root.path}
+                    </option>
+                  ))}
               </select>
             </label>
           ) : (
@@ -324,6 +333,10 @@ export function ConnectionsPage({
             <p className="small muted">
               A destination and both profiles are required for each format. Configure indexers,
               downloads, and imports in Chaptarr.
+            </p>
+            <p className="small muted">
+              Enable Chaptarr’s Hardcover provider and set its API token there for new-title search.
+              Check a real title in Chaptarr before enabling automatic requests.
             </p>
           </div>
           <div className="button-row">

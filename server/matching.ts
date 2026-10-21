@@ -16,7 +16,7 @@ export function normalizeText(value: string): string {
     .replace(/\p{M}/gu, '')
     .toLowerCase()
     .replace(/[’'`]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .replace(/\s+/g, ' ');
 }
@@ -138,6 +138,13 @@ function normalizedItem(item: LibraryItem) {
   }
   return value;
 }
+function completeAuthor(author: string): boolean {
+  return (
+    author.split(' ').length >= 2 ||
+    (author.length >= 2 &&
+      /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(author))
+  );
+}
 export function sourceIsFresh(
   state: SourceState | undefined,
   maxAgeHours: number,
@@ -169,12 +176,11 @@ export function matchAvailability(
     const itemTitle = normalized.title;
     const itemAuthor = normalized.author;
     const titleEqual = Boolean(title) && title === itemTitle;
-    const authorEqual = Boolean(author) && author.split(' ').length >= 2 && author === itemAuthor;
+    const authorEqual = Boolean(author) && completeAuthor(author) && author === itemAuthor;
     const sameIdentifier =
       shared(book.identifiers.isbn, item.identifiers.isbn) ||
       shared(book.identifiers.work, item.identifiers.work);
-    const conflictingAuthors =
-      author.split(' ').length >= 2 && itemAuthor.split(' ').length >= 2 && !authorEqual;
+    const conflictingAuthors = completeAuthor(author) && completeAuthor(itemAuthor) && !authorEqual;
     const safeExtent = extent === normalized.extent && collection === normalized.collection;
     if (
       book.id === `local:${item.id}` ||

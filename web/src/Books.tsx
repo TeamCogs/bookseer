@@ -215,6 +215,8 @@ export function BookDialog({
       <div className="format-options">
         {(['ebook', 'audiobook'] as MediaKind[]).map((kind) => {
           const availability = result.availability[kind];
+          const missingAgain =
+            result.requests?.[kind]?.status === 'available' && availability.status === 'not_found';
           const Icon = kind === 'ebook' ? BookOpen : Headphones;
           return (
             <section className="format-panel" key={kind}>
@@ -252,9 +254,11 @@ export function BookDialog({
               ))}
               {result.requests?.[kind] ? (
                 <p className="small amber-text">
-                  {result.requests[kind]!.following
-                    ? 'You’re following this request.'
-                    : 'Someone has already requested this format.'}{' '}
+                  {missingAgain
+                    ? 'This copy was available before. Its files are now missing, so you can request it again.'
+                    : result.requests[kind]!.following
+                      ? 'You’re following this request.'
+                      : 'Someone has already requested this format.'}{' '}
                   {['rejected', 'cancelled'].includes(result.requests[kind]!.status)
                     ? 'It is closed; an administrator can reopen it.'
                     : ''}
@@ -265,17 +269,19 @@ export function BookDialog({
                   className="button primary full"
                   disabled={
                     busy ||
-                    Boolean(result.requests?.[kind]?.following) ||
+                    Boolean(result.requests?.[kind]?.following && !missingAgain) ||
                     ['rejected', 'cancelled'].includes(result.requests?.[kind]?.status || '')
                   }
                   onClick={() => void request(kind)}
                 >
                   <Plus size={17} />
-                  {result.requests?.[kind]
-                    ? result.requests[kind]!.following
-                      ? 'Following request'
-                      : 'Follow existing request'
-                    : `${user.role === 'admin' || user.autoApprove ? 'Request' : 'Request approval'} ${kind}`}
+                  {missingAgain
+                    ? 'Request missing copy'
+                    : result.requests?.[kind]
+                      ? result.requests[kind]!.following
+                        ? 'Following request'
+                        : 'Follow existing request'
+                      : `${user.role === 'admin' || user.autoApprove ? 'Request' : 'Request approval'} ${kind}`}
                 </button>
               ) : null}
               {availability.candidates.length ? (

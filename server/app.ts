@@ -222,18 +222,24 @@ export async function buildApp(
     }
     return value;
   };
-  app.get<{ Querystring: { q?: string } }>(
+  app.get<{ Querystring: { q?: string; scope?: 'all' | 'local' | 'online' } }>(
     '/api/search',
     {
       schema: {
-        querystring: { type: 'object', properties: { q: text(200) }, additionalProperties: false },
+        querystring: {
+          type: 'object',
+          properties: { q: text(200), scope: { type: 'string', enum: ['all', 'local', 'online'] } },
+          additionalProperties: false,
+        },
       },
-      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
     },
     async (req) => {
       const query = req.query.q?.trim() || '';
       const inventory = store.inventory();
-      const library = groupInventory(inventory, store.libraryGroups())
+      const library = (
+        req.query.scope === 'online' ? [] : groupInventory(inventory, store.libraryGroups())
+      )
         .filter((g) => g.copies.some((i) => i.available) && searchInventory(g.copies, query).length)
         .slice(0, query ? 18 : 24)
         .map((g) => {
@@ -243,7 +249,7 @@ export async function buildApp(
         });
       let discovery: CatalogBook[] = [];
       let warning: string | undefined;
-      if (query.length >= 2 && !config.demo) {
+      if (req.query.scope !== 'local' && query.length >= 2 && !config.demo) {
         try {
           discovery = await services.discovery.search(query);
           discovery.forEach((book) => store.saveBook(book));
@@ -251,7 +257,7 @@ export async function buildApp(
           warning =
             'Online discovery is unavailable right now. Your connected library results are still shown.';
         }
-      } else if (config.demo) {
+      } else if (req.query.scope !== 'local' && config.demo) {
         discovery = (
           store.db.prepare('SELECT payload FROM catalogue WHERE id NOT LIKE ?').all('local:%') as {
             payload: string;
@@ -363,8 +369,16 @@ export async function buildApp(
   });
   app.get<{ Params: { id: string } }>('/api/covers/:id', async (req, reply) => {
     const item = store.item(req.params.id);
-    if (!item || item.source !== 'bookorbit' || config.demo) return reply.code(404).send();
-    const upstream = await services.bookorbit.cover(item);
+    if (!item || config.demo) return reply.code(404).send();
+    let upstream: Response;
+    try {
+      upstream =
+        item.source === 'bookorbit'
+          ? await services.bookorbit.cover(item)
+          : await services.chaptarr.cover(item);
+    } catch {
+      return reply.code(404).send();
+    }
     const mime = upstream.headers.get('content-type')?.split(';')[0] || '';
     if (!['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif'].includes(mime))
       return reply.code(404).send();
@@ -525,11 +539,47 @@ export async function buildApp(
           'Administrator reviewed the upstream state and reopened the request.',
         );
         store.setSetting(`lookup_retry:${record.id}`, '');
+        store.setSetting(`pending_add:${record.id}`, '');
         services.enqueue(String(record.id));
+      } else if (action === 'unfollow') {
+        const removed = store.db
+          .prepare('DELETE FROM followers WHERE request_id=? AND user_id=?')
+          .run(String(record.id), actor.id);
+        if (!removed.changes) throw new AppError(404, 'You are not following this request.');
+        const count = store.db
+          .prepare('SELECT COUNT(*) AS n FROM followers WHERE request_id=?')
+          .get(String(record.id)) as { n: number };
+        if (
+          !count.n &&
+          ['pending_approval', 'pending_setup', 'pending_metadata', 'checking'].includes(
+            String(record.status),
+          )
+        )
+          store.updateRequest(
+            String(record.id),
+            'cancelled',
+            'Cancelled before acquisition because no readers are following.',
+          );
       } else if (action === 'reject' || action === 'cancel') {
         if (action === 'reject') admin(req);
         else if (actor.role !== 'admin' && record.requester_id !== actor.id)
           throw new AppError(403, 'You cannot cancel another user’s request.');
+        if (action === 'cancel' && actor.role !== 'admin') {
+          if (
+            !store.db
+              .prepare('SELECT 1 FROM followers WHERE request_id=? AND user_id=?')
+              .get(String(record.id), actor.id)
+          )
+            throw new AppError(403, 'You are no longer following this request.');
+          const followers = store.db
+            .prepare('SELECT COUNT(*) AS n FROM followers WHERE request_id=?')
+            .get(String(record.id)) as { n: number };
+          if (followers.n > 1)
+            throw new AppError(
+              409,
+              'Other readers are following this request. Stop following it without cancelling their request.',
+            );
+        }
         if (
           !['pending_approval', 'pending_setup', 'pending_metadata', 'checking'].includes(
             String(record.status),

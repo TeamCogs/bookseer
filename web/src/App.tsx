@@ -30,6 +30,7 @@ const labels: Record<BookRequest['status'], string> = {
   pending_approval: 'Awaiting approval',
   pending_setup: 'Approved · waiting',
   pending_metadata: 'Waiting for metadata',
+  pending_upstream: 'Preparing book',
   checking: 'Checking libraries',
   submitting: 'Sending request',
   requested: 'Requested',
@@ -530,19 +531,57 @@ function Discover({
   }>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [discovering, setDiscovering] = useState(true);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
+    setDiscovering(true);
+    setData(undefined);
     setError('');
-    api<typeof data>(`/search?q=${encodeURIComponent(query)}`, 'GET', undefined, controller.signal)
+    void api<NonNullable<typeof data>>(
+      `/search?q=${encodeURIComponent(query)}&scope=local`,
+      'GET',
+      undefined,
+      controller.signal,
+    )
       .then((r) => {
-        setData(r);
+        if (controller.signal.aborted) return;
+        setData((current) => ({
+          library: r.library,
+          discovery: current?.discovery || [],
+          warning: current?.warning,
+        }));
         setLoading(false);
       })
       .catch((e) => {
         if (!controller.signal.aborted) {
           setError(message(e));
           setLoading(false);
+        }
+      });
+    void api<NonNullable<typeof data>>(
+      `/search?q=${encodeURIComponent(query)}&scope=online`,
+      'GET',
+      undefined,
+      controller.signal,
+    )
+      .then((r) => {
+        if (controller.signal.aborted) return;
+        setData((current) => ({
+          library: current?.library || [],
+          discovery: r.discovery,
+          warning: r.warning,
+        }));
+        setDiscovering(false);
+      })
+      .catch((e) => {
+        if (!controller.signal.aborted) {
+          setData((current) => ({
+            library: current?.library || [],
+            discovery: [],
+            warning: message(e),
+          }));
+          setDiscovering(false);
         }
       });
     return () => controller.abort();
@@ -708,7 +747,11 @@ function Discover({
                 {query ? 'Metadata from Open Library' : 'Search by title, author, or ISBN'}
               </span>
             </div>
-            {data?.discovery.length ? (
+            {discovering ? (
+              <p className="muted small" role="status">
+                Searching the online catalogue…
+              </p>
+            ) : data?.discovery.length ? (
               <BookGrid results={data.discovery} select={select} />
             ) : (
               <div className="search-prompt">
@@ -840,6 +883,21 @@ function RequestsPage({
                 ) : null}
               </div>
               <div className="request-actions">
+                {r.following &&
+                user.role !== 'admin' &&
+                (r.followers > 1 ||
+                  user.id !== r.requesterId ||
+                  !['pending_approval', 'pending_setup', 'pending_metadata', 'checking'].includes(
+                    r.status,
+                  )) ? (
+                  <button
+                    className="text-button"
+                    disabled={busy === r.id}
+                    onClick={() => void action(r.id, 'unfollow')}
+                  >
+                    Stop following
+                  </button>
+                ) : null}
                 {user.role === 'admin' &&
                 ['pending_approval', 'pending_setup', 'pending_metadata'].includes(r.status) ? (
                   <>
@@ -862,7 +920,7 @@ function RequestsPage({
                 {['pending_approval', 'pending_setup', 'pending_metadata', 'checking'].includes(
                   r.status,
                 ) &&
-                (user.id === r.requesterId || user.role === 'admin') ? (
+                (user.role === 'admin' || (user.id === r.requesterId && r.followers <= 1)) ? (
                   <button
                     className="text-button"
                     disabled={busy === r.id}

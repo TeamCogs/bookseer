@@ -303,3 +303,83 @@ test('sign out accepts a bodyless DELETE and invalidates the session', async () 
     await ctx.close();
   }
 });
+test('local shelf search stays independent of online metadata availability', async (t) => {
+  const ctx = await setup();
+  let onlineCalls = 0;
+  t.mock.method(ctx.services.discovery, 'search', async () => {
+    onlineCalls++;
+    throw new Error('Catalogue unavailable');
+  });
+  try {
+    const headers = await ctx.login();
+    const local = await ctx.app.inject({ url: '/api/search?q=oathbringer&scope=local', headers });
+    assert.equal(local.statusCode, 200);
+    assert.equal(local.json().library[0].availability.ebook.status, 'available');
+    assert.equal(onlineCalls, 0);
+    const online = await ctx.app.inject({ url: '/api/search?q=oathbringer&scope=online', headers });
+    assert.equal(online.statusCode, 200);
+    assert.equal(onlineCalls, 1);
+    assert.ok(online.json().warning);
+  } finally {
+    await ctx.close();
+  }
+});
+test('readers can leave a shared request without cancelling another reader’s request', async () => {
+  const ctx = await setup();
+  try {
+    const hashed = await hashPassword('a-shared-reader-password');
+    const users = ['shared1', 'shared2'].map((username) =>
+      ctx.store.addUser({
+        username,
+        displayName: username,
+        passwordHash: hashed,
+        role: 'user',
+        autoApprove: false,
+        weeklyLimit: 5,
+      }),
+    );
+    const missing = { ...book, id: 'shared:missing', title: 'A Different Missing Work' };
+    ctx.store.saveBook(missing);
+    const request = ctx.store.createRequest(missing, 'ebook', users[0]);
+    ctx.store.createRequest(missing, 'ebook', users[1]);
+    const headers = await ctx.login('shared1', 'a-shared-reader-password');
+    assert.equal(
+      (
+        await ctx.app.inject({
+          method: 'POST',
+          url: `/api/requests/${request.id}/cancel`,
+          headers,
+          payload: {},
+        })
+      ).statusCode,
+      409,
+    );
+    assert.equal(
+      (
+        await ctx.app.inject({
+          method: 'POST',
+          url: `/api/requests/${request.id}/unfollow`,
+          headers,
+          payload: {},
+        })
+      ).statusCode,
+      200,
+    );
+    assert.equal(ctx.store.requestsFor(users[0]).length, 0);
+    assert.equal(ctx.store.requestsFor(users[1]).length, 1);
+    assert.equal(ctx.store.request(request.id)?.status, 'pending_approval');
+    assert.equal(
+      (
+        await ctx.app.inject({
+          method: 'POST',
+          url: `/api/requests/${request.id}/cancel`,
+          headers,
+          payload: {},
+        })
+      ).statusCode,
+      403,
+    );
+  } finally {
+    await ctx.close();
+  }
+});

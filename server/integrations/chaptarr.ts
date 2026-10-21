@@ -4,6 +4,11 @@ import { digest } from '../security.js';
 import { compatibleExtent, identifiers, normalizeAuthor, normalizeText } from '../matching.js';
 import { array, IntegrationError, object, readJson, upstream } from './http.js';
 export class LookupPendingError extends IntegrationError {}
+export class PendingAddError extends IntegrationError {
+  constructor(readonly pendingId: number) {
+    super('Chaptarr accepted the addition for background processing.');
+  }
+}
 
 export class Chaptarr {
   private controller = new AbortController();
@@ -85,6 +90,9 @@ export class Chaptarr {
       prefixed('hc', book.hardcoverBookId),
       prefixed('gr', book.goodreadsWorkId),
     ];
+    const image = Array.isArray(book.images)
+      ? book.images.find((i: any) => i.coverType === 'cover')?.url
+      : undefined;
     return {
       id: `chaptarr:${this.fingerprint}:${book.id}`,
       source: 'chaptarr',
@@ -101,11 +109,33 @@ export class Chaptarr {
         workIds,
       ),
       url: `${this.config.chaptarrPublicUrl || this.config.chaptarrUrl}/book/${encodeURIComponent(book.titleSlug || book.foreignBookId || String(book.id))}`,
-      coverUrl: Array.isArray(book.images)
-        ? book.images.find((i: any) => i.coverType === 'cover')?.url
+      coverUrl: image
+        ? `/api/covers/${encodeURIComponent(`chaptarr:${this.fingerprint}:${book.id}`)}`
         : undefined,
       year: book.releaseDate ? Number(String(book.releaseDate).slice(0, 4)) : undefined,
     };
+  }
+  async cover(item: LibraryItem): Promise<Response> {
+    if (!item.id.startsWith(`chaptarr:${this.fingerprint}:`))
+      throw new IntegrationError('The cover belongs to a previous Chaptarr connection.');
+    const book = object(await this.json(`/book/${encodeURIComponent(item.remoteId)}`));
+    const raw = Array.isArray(book.images)
+      ? book.images.find((image: any) => image.coverType === 'cover')?.url
+      : undefined;
+    if (typeof raw !== 'string') throw new IntegrationError('No Chaptarr cover is available.');
+    const base = new URL(this.config.chaptarrUrl);
+    const url = new URL(raw, this.config.chaptarrUrl + '/');
+    if (
+      url.origin !== base.origin ||
+      url.username ||
+      url.password ||
+      !/\/(mediacover|mediacoverproxy)(\/|$)/i.test(url.pathname)
+    )
+      throw new IntegrationError('The Chaptarr cover is not a local cover resource.');
+    return upstream(url.origin, url.pathname + url.search, {
+      signal: this.controller.signal,
+      headers: { 'X-Api-Key': this.config.chaptarrApiKey },
+    });
   }
   async lookup(book: CatalogBook, kind: MediaKind): Promise<Record<string, any>> {
     if (!this.ready(kind))
@@ -118,10 +148,43 @@ export class Chaptarr {
     let found = array(
       await this.json(`/book/lookup?term=${encodeURIComponent(lookupTerm)}&mediaType=${kind}`),
     );
-    if (!found.length && lookupTerm !== book.title)
-      found = array(
-        await this.json(`/book/lookup?term=${encodeURIComponent(book.title)}&mediaType=${kind}`),
-      );
+    if (!found.length) {
+      let search: Record<string, any>[];
+      try {
+        search = array(
+          await this.json(`/search?term=${encodeURIComponent(book.title)}&provider=hardcover`),
+        );
+      } catch {
+        throw new IntegrationError(
+          'Chaptarr could not resolve the work through its native search provider. Configure its Hardcover provider and API token, then retry.',
+        );
+      }
+      const previews = search
+        .map((r) => r.book)
+        .filter(
+          (b: any) =>
+            b &&
+            normalizeText(b.title || '') === normalizeText(book.title) &&
+            normalizeAuthor(b.author?.authorName || '') === normalizeAuthor(book.author),
+        );
+      const ids = [
+        ...new Set<string>(
+          previews
+            .map((b: any) => b.foreignBookId)
+            .filter(
+              (id: unknown): id is string => typeof id === 'string' && /^(hc|ol|gr):/.test(id),
+            ),
+        ),
+      ];
+      if (ids.length > 1)
+        throw new IntegrationError(
+          'Chaptarr search returned multiple matching works. Review the identity in Chaptarr before requesting it.',
+        );
+      if (ids.length === 1)
+        found = array(
+          await this.json(`/book/lookup?term=${encodeURIComponent(ids[0])}&mediaType=${kind}`),
+        );
+    }
     if (!found.length)
       throw new LookupPendingError('Chaptarr metadata is not ready for this work yet.');
     const matches = found.filter((candidate) => {
@@ -145,6 +208,8 @@ export class Chaptarr {
       const sameWork = candidateWork.some((id) => book.identifiers.work.includes(id));
       return (
         (sameTitle || (sameWork && compatibleExtent(book.title, candidate.title || ''))) &&
+        Boolean(normalizeText(book.title)) &&
+        Boolean(normalizeAuthor(book.author)) &&
         normalizeAuthor(candidate.author?.authorName || candidate.author?.name || '') ===
           normalizeAuthor(book.author)
       );
@@ -161,6 +226,7 @@ export class Chaptarr {
     kind: MediaKind,
     beforeWrite: () => void,
     resolved?: Record<string, any>,
+    allowCreate = true,
   ): Promise<{ id: number; available: boolean }> {
     const candidate = resolved || (await this.lookup(book, kind));
     const local =
@@ -186,6 +252,10 @@ export class Chaptarr {
       );
     }
     if (!id) {
+      if (!allowCreate)
+        throw new LookupPendingError(
+          'The accepted Chaptarr addition has not created a local book yet.',
+        );
       const { root, quality, metadata } = this.profiles(kind);
       const payload = {
         ...candidate,
@@ -214,6 +284,8 @@ export class Chaptarr {
         addOptions: { searchForNewBook: false, addType: 'manual' },
       };
       const response = object(await this.json(`/book?mediaType=${kind}`, payload));
+      if (Number.isSafeInteger(response.pendingId) && response.pendingId > 0)
+        throw new PendingAddError(response.pendingId);
       if (!Number.isSafeInteger(response.id) || response.id <= 0)
         throw new IntegrationError(
           'Chaptarr accepted a pending or unexpected add response. Verify it in Chaptarr; Bookseer will not retry automatically.',

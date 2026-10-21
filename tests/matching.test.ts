@@ -19,6 +19,32 @@ test('recognizes filename-style title and Last, First author without confusing f
   assert.equal(matchAvailability(book, 'ebook', [item], fresh(), 24).status, 'available');
   assert.equal(matchAvailability(book, 'audiobook', [item], fresh(), 24).status, 'not_found');
 });
+test('non-Latin titles and authors remain searchable and match complete identities', () => {
+  const japanese = {
+    ...book,
+    id: 'jp:1',
+    title: 'もののけ姫',
+    author: '宮崎駿',
+    identifiers: { isbn: [], work: [] },
+  };
+  const copy = { ...item, title: japanese.title, author: japanese.author };
+  assert.equal(matchAvailability(japanese, 'ebook', [copy], fresh(), 24).status, 'available');
+  assert.equal(
+    matchAvailability({ ...japanese, title: '千と千尋の神隠し' }, 'ebook', [copy], fresh(), 24)
+      .status,
+    'not_found',
+  );
+  assert.equal(
+    matchAvailability(
+      { ...japanese, identifiers: book.identifiers },
+      'ebook',
+      [{ ...copy, author: '夏目漱石', identifiers: book.identifiers }],
+      fresh(),
+      24,
+    ).status,
+    'needs_review',
+  );
+});
 test('validates ISBN checksums and converts ISBN-10 to ISBN-13', () => {
   assert.equal(normalizeIsbn('0-7653-2637-X'), '9780765326379');
   assert.equal(normalizeIsbn('9780765326370'), undefined);
