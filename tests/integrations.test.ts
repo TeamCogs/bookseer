@@ -626,7 +626,7 @@ test('Chaptarr cover proxy authenticates only local cover resources and rejects 
   assert.equal(imageReads, 1);
 });
 
-test('canonical Goodreads identity supports edition subtitles and expanded author names while rejecting a conflicting author', async (t) => {
+test('canonical alias resolution supports an un-echoed Goodreads ID, edition subtitles, and expanded author names while rejecting a conflicting author', async (t) => {
   const c = config().connections;
   Object.assign(c, {
     chaptarrUrl: 'http://chaptarr.test',
@@ -648,7 +648,6 @@ test('canonical Goodreads identity supports edition subtitles and expanded autho
         title: 'Frankenstein; or, The Modern Prometheus',
         author: { authorName: author },
         foreignBookId: 'hc:999',
-        goodreadsWorkId: 'gr:321',
       },
     ]),
   );

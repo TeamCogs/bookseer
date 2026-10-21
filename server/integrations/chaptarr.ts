@@ -148,6 +148,10 @@ export class Chaptarr {
     let found = array(
       await this.json(`/book/lookup?term=${encodeURIComponent(lookupTerm)}&mediaType=${kind}`),
     );
+    // Canonical lookup can resolve a Goodreads/Open Library alias to a Hardcover ID
+    // without echoing the requested alias in the resource. The lookup itself is
+    // identity evidence; the author, extent, and unique-result checks still apply.
+    let canonicalIdentity = found.length > 0 && /^(ol:|hc:|gr:|gb:)/.test(lookupTerm);
     if (!found.length) {
       let searched = false;
       for (const provider of ['goodreads', 'hardcover']) {
@@ -186,6 +190,7 @@ export class Chaptarr {
         found = resolved.length
           ? resolved
           : [previews.find((candidate: any) => candidate.foreignBookId === ids[0])!];
+        canonicalIdentity = resolved.length > 0;
         break;
       }
       if (!searched)
@@ -218,7 +223,8 @@ export class Chaptarr {
             : null,
         ],
       ).work;
-      const sameWork = candidateWork.some((id) => book.identifiers.work.includes(id));
+      const sameWork =
+        canonicalIdentity || candidateWork.some((id) => book.identifiers.work.includes(id));
       const candidateAuthor = normalizeAuthor(
         candidate.author?.authorName || candidate.author?.name || '',
       );
