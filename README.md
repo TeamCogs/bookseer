@@ -6,6 +6,8 @@
 
 A self-hosted book discovery and request portal for Docker and NAS deployments. Bring your existing [BookOrbit](https://github.com/bookorbit/bookorbit) library together with official [Chaptarr](https://github.com/Chaptarr/chaptarr), see what you already own, and request the formats you're missing.
 
+![Bookseer reading room with sample books and a reader account](docs/images/reading-room.png)
+
 ## What it does
 
 - **Your whole connected library**, including books acquired outside Bookseer. Library results appear before online discovery results.
@@ -46,6 +48,8 @@ Successful complete inventory snapshots establish availability. A failed or part
 This is an actively developed independent project. Automated tests cover account boundaries, request safety, matching, grouping, persistence, and upstream HTTP contracts. CI builds and runs the hardened production container on x86-64 and ARM64. Live BookOrbit inventory and ownership have been exercised against a large library. **The Chaptarr adapter still requires a recorded live acquisition/import verification**; contract tests alone do not establish it. Check the workflow for the revision you deploy.
 
 See [implemented features and verification scope](docs/features.md). Bookseer does not claim all Seerr features: external notification delivery, SSO, reading sync, ebook conversion, and indexer management are not implemented.
+
+![Duplicate ebook copies grouped under one title](docs/images/duplicate-copies.png)
 
 ## Development
 

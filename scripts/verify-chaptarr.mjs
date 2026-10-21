@@ -66,7 +66,9 @@ assert.ok(
   Array.isArray(found) && found.length,
   'Upstream metadata must return the public-domain test work.',
 );
-const candidate = found.find((b) => /^frankenstein\b/i.test(b.title) && /mary.*shelley/i.test(b.author?.authorName || ''));
+const candidate = found.find(
+  (b) => /^frankenstein\b/i.test(b.title) && /mary.*shelley/i.test(b.author?.authorName || ''),
+);
 assert.ok(candidate, 'A unique complete Frankenstein work is required.');
 const request = {
   id: 'compatibility:frankenstein',

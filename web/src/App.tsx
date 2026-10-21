@@ -192,8 +192,13 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
   const [menu, setMenu] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const sidebar = useRef<HTMLElement>(null);
-  useEffect(() => { if (menu) sidebar.current?.querySelector<HTMLButtonElement>('button')?.focus(); }, [menu]);
-  const closeMenu = () => { setMenu(false); menuButton.current?.focus(); };
+  useEffect(() => {
+    if (menu) sidebar.current?.querySelector<HTMLButtonElement>('button')?.focus();
+  }, [menu]);
+  const closeMenu = () => {
+    setMenu(false);
+    menuButton.current?.focus();
+  };
   const [query, setQuery] = useState('');
   const [submitted, setSubmitted] = useState('');
   const [status, setStatus] = useState<AppStatus | null>(null);
@@ -288,7 +293,14 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
       <a className="skip-link" href="#content">
         Skip to content
       </a>
-      <aside id="sidebar-nav" ref={sidebar} className={`sidebar ${menu ? 'is-open' : ''}`} onKeyDown={e => { if (e.key === 'Escape' && menu) closeMenu(); }}>
+      <aside
+        id="sidebar-nav"
+        ref={sidebar}
+        className={`sidebar ${menu ? 'is-open' : ''}`}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && menu) closeMenu();
+        }}
+      >
         <Brand />
         <div className="sidebar-group-label">YOUR READING ROOM</div>
         <nav aria-label="Main navigation">
@@ -328,11 +340,7 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
         </div>
       </aside>
       {menu ? (
-        <button
-          className="menu-scrim"
-          aria-label="Close navigation"
-          onClick={closeMenu}
-        />
+        <button className="menu-scrim" aria-label="Close navigation" onClick={closeMenu} />
       ) : null}
       <div className="main-shell">
         <header className="topbar">
