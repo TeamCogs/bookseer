@@ -40,7 +40,7 @@ assert.ok(q?.id && m?.id, 'Fresh upstream profiles are required.');
 await api('/rootfolder', {
   name: 'Bookseer isolated fixture',
   path: '/ebooks',
-  folderType: 1,
+  folderType: 2,
   ebook: {
     qualityProfileId: q.id,
     metadataProfileId: m.id,

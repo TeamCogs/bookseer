@@ -16,12 +16,14 @@ export function LibraryPage({
   sync,
   syncing,
   admin,
+  onChanged,
 }: {
   revision: number;
   select: (b: BookResult) => void;
   sync: () => void;
   syncing: boolean;
   admin: boolean;
+  onChanged: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [submitted, setSubmitted] = useState('');
@@ -80,6 +82,7 @@ export function LibraryPage({
     try {
       await api(`/library/groups/${id}`, 'DELETE');
       setChanged((n) => n + 1);
+      onChanged();
       setSelected([]);
     } catch (e) {
       setError(message(e));
@@ -263,6 +266,7 @@ export function LibraryPage({
             setConfirm(false);
             setSelected([]);
             setChanged((n) => n + 1);
+            onChanged();
           }}
         />
       ) : null}
@@ -279,7 +283,9 @@ function GroupDialog({
   saved: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [preferred, setPreferred] = useState(books[0].copies?.[0]?.id || '');
+  const preferredItem = (book: BookResult) =>
+    book.copies?.find((i) => book.book.id === `local:${i.id}`)?.id || book.copies?.[0]?.id || '';
+  const [preferred, setPreferred] = useState(() => preferredItem(books[0]));
   const [acknowledged, setAcknowledged] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -308,7 +314,12 @@ function GroupDialog({
     }
   }
   return (
-    <dialog className="book-dialog group-dialog" ref={dialog} onCancel={close}>
+    <dialog
+      className="book-dialog group-dialog"
+      aria-labelledby="group-dialog-title"
+      ref={dialog}
+      onCancel={close}
+    >
       <button
         className="icon-button dialog-close"
         aria-label="Close grouping review"
@@ -317,7 +328,7 @@ function GroupDialog({
         <X size={20} />
       </button>
       <p className="eyebrow">REVIEW DUPLICATE COPIES</p>
-      <h2>One book, every copy.</h2>
+      <h2 id="group-dialog-title">One book, every copy.</h2>
       <p className="muted small">
         Choose the preferred title. Grouping changes how Bookseer displays these entries; your
         library files and metadata remain intact.
@@ -332,8 +343,8 @@ function GroupDialog({
           <input
             type="radio"
             name="canonical"
-            value={book.copies?.[0]?.id}
-            checked={preferred === book.copies?.[0]?.id}
+            value={preferredItem(book)}
+            checked={preferred === preferredItem(book)}
             onChange={(e) => setPreferred(e.target.value)}
           />
           <span>

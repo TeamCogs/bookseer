@@ -17,6 +17,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/chaptarr/config" "$RUNNER_TEMP/chaptarr/ebooks"
           CHAPTARR_TEST_KEY=$(openssl rand -hex 16)
+          echo "::add-mask::$CHAPTARR_TEST_KEY"
           echo "CHAPTARR_API_KEY=$CHAPTARR_TEST_KEY" >> "$GITHUB_ENV"
           echo "CHAPTARR_URL=http://127.0.0.1:8789" >> "$GITHUB_ENV"
           cat > "$RUNNER_TEMP/chaptarr/config/config.xml" <<EOF

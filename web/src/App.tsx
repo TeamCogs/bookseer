@@ -395,6 +395,7 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
               sync={() => void sync()}
               syncing={syncing}
               admin={user.role === 'admin'}
+              onChanged={refresh}
             />
           ) : null}
           {page === 'requests' ? (

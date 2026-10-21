@@ -31,8 +31,12 @@ jobs:
       - run: docker build -t bookseer:test .
       - name: Create isolated credentials
         run: |
-          echo "BOOKSEER_ADMIN_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
-          echo "BOOKSEER_SESSION_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          TEST_PASSWORD=$(openssl rand -hex 24)
+          TEST_KEY=$(openssl rand -hex 32)
+          echo "::add-mask::$TEST_PASSWORD"
+          echo "::add-mask::$TEST_KEY"
+          echo "BOOKSEER_ADMIN_PASSWORD=$TEST_PASSWORD" >> "$GITHUB_ENV"
+          echo "BOOKSEER_SESSION_SECRET=$TEST_KEY" >> "$GITHUB_ENV"
       - name: Run hardened container
         run: |
           docker volume create bookseer-test
