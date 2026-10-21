@@ -206,6 +206,16 @@ export class Services {
       const resolved = await this.chaptarr.lookup(book, kind);
       if (this.stopping || this.store.request(id)?.status !== 'checking') return;
       if (
+        typeof resolved.foreignBookId === 'string' &&
+        /^(ol:|hc:|gr:|gb:)/.test(resolved.foreignBookId)
+      ) {
+        book.identifiers = {
+          ...book.identifiers,
+          work: [...new Set([resolved.foreignBookId, ...book.identifiers.work])],
+        };
+        this.store.saveBook(book);
+      }
+      if (
         pending &&
         !(kind === 'ebook' ? resolved.localEbookBooks : resolved.localAudiobookBooks)?.some(
           (copy: { id: number }) => Number.isSafeInteger(copy.id) && copy.id > 0,

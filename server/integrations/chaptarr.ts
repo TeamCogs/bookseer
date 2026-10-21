@@ -1,7 +1,13 @@
 import type { CatalogBook, LibraryItem, MediaKind } from '../../shared/types.js';
 import type { ConnectionConfig } from '../config.js';
 import { digest } from '../security.js';
-import { compatibleExtent, identifiers, normalizeAuthor, normalizeText } from '../matching.js';
+import {
+  compatibleAuthorNames,
+  compatibleExtent,
+  identifiers,
+  normalizeAuthor,
+  normalizeText,
+} from '../matching.js';
 import { array, IntegrationError, object, readJson, upstream } from './http.js';
 export class LookupPendingError extends IntegrationError {}
 export class PendingAddError extends IntegrationError {
@@ -229,14 +235,9 @@ export class Chaptarr {
         candidate.author?.authorName || candidate.author?.name || '',
       );
       const requestedAuthor = normalizeAuthor(book.author);
-      const a = candidateAuthor.split(' ');
-      const b = requestedAuthor.split(' ');
       const sameAuthor =
         candidateAuthor === requestedAuthor ||
-        (sameWork &&
-          a.length >= 2 &&
-          b.length >= 2 &&
-          (a.every((word) => b.includes(word)) || b.every((word) => a.includes(word))));
+        (sameWork && compatibleAuthorNames(candidateAuthor, requestedAuthor));
       return (
         (sameTitle || (sameWork && compatibleExtent(book.title, candidate.title || ''))) &&
         Boolean(normalizeText(book.title)) &&
@@ -310,6 +311,7 @@ export class Chaptarr {
           ebookMonitorNewItems: 'none',
           audiobookMonitorNewItems: 'none',
           syncMonitoredAcrossFormats: false,
+          addOptions: { monitor: 'specificBook' },
         },
         addOptions: { searchForNewBook: false, addType: 'manual' },
       };

@@ -144,7 +144,12 @@ test('shared requests coalesce, remain private to followers, respect quotas, and
       ctx.login('reader3', 'reader-test-password'),
       ctx.login(),
     ]);
-    const unavailable = { ...book, id: 'ol:new', title: 'The Missing Book' };
+    const unavailable = {
+      ...book,
+      id: 'ol:new',
+      title: 'The Missing Book',
+      identifiers: { isbn: [], work: ['ol:new'] },
+    };
     store.saveBook(unavailable);
     const request = {
       method: 'POST' as const,
@@ -163,7 +168,12 @@ test('shared requests coalesce, remain private to followers, respect quotas, and
       (await app.inject({ url: '/api/requests', headers: b })).json().items[0].followers,
       2,
     );
-    store.saveBook({ ...unavailable, id: 'ol:next', title: 'Another Missing Book' });
+    store.saveBook({
+      ...unavailable,
+      id: 'ol:next',
+      title: 'Another Missing Book',
+      identifiers: { isbn: [], work: ['ol:next'] },
+    });
     const creator = responses[0].statusCode === 201 ? a : b;
     assert.equal(
       (

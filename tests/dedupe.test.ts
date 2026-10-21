@@ -58,6 +58,26 @@ test('dedupe preserves parts, volumes, collections, distinct authors and incompl
   assert.equal(groupInventory(copies).length, 6);
 });
 
+test('shared work identities group canonical subtitles and expanded author names without grouping parts or conflicting authors', () => {
+  const primary = {
+    ...item,
+    title: 'Frankenstein',
+    author: 'Mary Shelley',
+    identifiers: { isbn: [], work: ['hc:23293'] },
+  };
+  const canonical = {
+    ...primary,
+    id: 'canonical',
+    title: 'Frankenstein or The Modern Prometheus',
+    author: 'Mary Wollstonecraft Shelley',
+  };
+  const part = { ...canonical, id: 'part', title: 'Frankenstein Part One' };
+  const conflict = { ...canonical, id: 'conflict', author: 'A Different Author' };
+  const groups = groupInventory([primary, canonical, part, conflict]);
+  assert.equal(groups.length, 3);
+  assert.equal(groups.find((group) => group.copies.includes(primary))?.copies.length, 2);
+});
+
 test('local and online identities share one format request, follower list, and reacquisition record', () => {
   const store = new Store(':memory:');
   try {

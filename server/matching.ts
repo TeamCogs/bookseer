@@ -46,10 +46,36 @@ export function displayTitle(value: string, author: string): string {
   }
   return title;
 }
-export function catalogueIdentity(book: CatalogBook): string {
+export function catalogueIdentity(book: Pick<CatalogBook, 'title' | 'author'>): string {
   const title = normalizeText(displayTitle(book.title, book.author));
   const author = normalizeAuthor(book.author);
   return title && author && completeAuthor(author) ? `${title}|${author}` : '';
+}
+export function compatibleAuthorNames(a: string, b: string): boolean {
+  const left = normalizeAuthor(a);
+  const right = normalizeAuthor(b);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const x = left.split(' ');
+  const y = right.split(' ');
+  return (
+    x.length >= 2 &&
+    y.length >= 2 &&
+    (x.every((word) => y.includes(word)) || y.every((word) => x.includes(word)))
+  );
+}
+export function sameCatalogueWork(
+  a: Pick<CatalogBook, 'title' | 'author' | 'identifiers'>,
+  b: Pick<CatalogBook, 'title' | 'author' | 'identifiers'>,
+): boolean {
+  const identity = catalogueIdentity(a);
+  return Boolean(
+    identity &&
+    (identity === catalogueIdentity(b) ||
+      (shared(a.identifiers.work, b.identifiers.work) &&
+        compatibleExtent(a.title, b.title) &&
+        compatibleAuthorNames(a.author, b.author))),
+  );
 }
 export function normalizeIsbn(value: string): string | undefined {
   const isbn = value.toUpperCase().replace(/[^0-9X]/g, '');
@@ -182,15 +208,19 @@ export function matchAvailability(
     const itemAuthor = normalized.author;
     const titleEqual = Boolean(title) && title === itemTitle;
     const authorEqual = Boolean(author) && completeAuthor(author) && author === itemAuthor;
-    const sameIdentifier =
-      shared(book.identifiers.isbn, item.identifiers.isbn) ||
-      shared(book.identifiers.work, item.identifiers.work);
-    const conflictingAuthors = completeAuthor(author) && completeAuthor(itemAuthor) && !authorEqual;
+    const sameWork = shared(book.identifiers.work, item.identifiers.work);
+    const sameIdentifier = shared(book.identifiers.isbn, item.identifiers.isbn) || sameWork;
+    const compatibleAuthor =
+      authorEqual || (sameWork && compatibleAuthorNames(book.author, item.author));
+    const conflictingAuthors =
+      completeAuthor(author) && completeAuthor(itemAuthor) && !compatibleAuthor;
     const safeExtent = extent === normalized.extent && collection === normalized.collection;
     if (
       book.id === `local:${item.id}` ||
       (safeExtent &&
-        ((titleEqual && authorEqual) || (sameIdentifier && titleEqual && !conflictingAuthors)))
+        ((titleEqual && authorEqual) ||
+          (sameIdentifier && titleEqual && !conflictingAuthors) ||
+          (sameWork && compatibleAuthor && completeAuthor(author))))
     )
       exact.push(item);
     else if (
@@ -385,6 +415,7 @@ export function groupInventory(
     if (parent.has(a) && parent.has(b)) parent.set(find(b), find(a));
   };
   const keys = new Map<string, string>();
+  const workOwners = new Map<string, LibraryItem[]>();
   for (const item of items) {
     const n = normalizedItem(item);
     if (!n.title || !n.author) continue;
@@ -392,6 +423,14 @@ export function groupInventory(
     const previous = keys.get(key);
     if (previous) union(previous, item.id);
     else keys.set(key, item.id);
+    for (const workId of item.identifiers.work) {
+      const owners = workOwners.get(workId) || [];
+      owners
+        .filter((owner) => sameCatalogueWork(owner, item))
+        .forEach((owner) => union(owner.id, item.id));
+      owners.push(item);
+      workOwners.set(workId, owners);
+    }
   }
   for (const group of saved) {
     const first = group.itemIds.find((id) => parent.has(id));

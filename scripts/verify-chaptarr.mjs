@@ -128,10 +128,29 @@ assert.ok(
   'A monitored record without files must not appear available.',
 );
 const authors = await api('/author');
-assert.ok(
-  authors.every((a) => !a.ebookMonitored && !a.audiobookMonitored),
-  'A single request must not turn on whole-author monitoring.',
+const rawBooks = await api('/book?include=author');
+const monitoredBooks = rawBooks.filter(
+  (book) => book.monitored || book.ebookMonitored || book.audiobookMonitored,
 );
+assert.ok(
+  authors.every(
+    (a) =>
+      a.ebookMonitorNewItems === 'none' &&
+      a.audiobookMonitorNewItems === 'none' &&
+      a.ebookMonitorExistingMode !== 'all' &&
+      a.audiobookMonitorExistingMode !== 'all',
+  ),
+  'A single request must leave future books disabled and must not monitor the whole catalogue.',
+);
+assert.ok(
+  monitoredBooks.length <= 1 &&
+    monitoredBooks.every(
+      (book) => book.mediaType === 'ebook' && (!outcome?.id || book.id === outcome.id),
+    ),
+  'Only the requested ebook may be monitored.',
+);
+if (outcome?.id)
+  assert.equal(monitoredBooks.length, 1, 'A completed native add must monitor its requested book.');
 console.log(
   JSON.stringify({
     upstreamVersion: version.version,
@@ -142,5 +161,6 @@ console.log(
     formatScoped: true,
     filePresence: true,
     wholeAuthorMonitoring: false,
+    monitoredBooks: monitoredBooks.length,
   }),
 );

@@ -15,7 +15,7 @@ import type {
   User,
 } from '../shared/types.js';
 import { readerRequestMessage } from '../shared/messages.js';
-import { catalogueIdentity } from './matching.js';
+import { sameCatalogueWork } from './matching.js';
 import { digest, token } from './security.js';
 
 export class Store {
@@ -189,11 +189,21 @@ export class Store {
     this.cachedInventory = undefined;
   }
   saveBook(book: CatalogBook) {
+    const previous = this.book(book.id);
+    const value = previous
+      ? {
+          ...book,
+          identifiers: {
+            isbn: [...new Set([...previous.identifiers.isbn, ...book.identifiers.isbn])],
+            work: [...new Set([...previous.identifiers.work, ...book.identifiers.work])],
+          },
+        }
+      : book;
     this.db
       .prepare(
         'INSERT INTO catalogue VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,saved_at=excluded.saved_at WHERE catalogue.payload<>excluded.payload',
       )
-      .run(book.id, JSON.stringify(book), new Date().toISOString());
+      .run(book.id, JSON.stringify(value), new Date().toISOString());
   }
   book(id: string): CatalogBook | undefined {
     const row = this.db.prepare('SELECT payload FROM catalogue WHERE id=?').get(id) as
@@ -292,7 +302,6 @@ export class Store {
       Record<string, unknown> | undefined;
   }
   relatedRequests(book: CatalogBook) {
-    const identity = catalogueIdentity(book);
     return (
       this.db
         .prepare(
@@ -301,8 +310,7 @@ export class Store {
         .all() as Record<string, unknown>[]
     ).filter(
       (row) =>
-        row.catalog_id === book.id ||
-        (identity && catalogueIdentity(JSON.parse(String(row.book_payload))) === identity),
+        row.catalog_id === book.id || sameCatalogueWork(book, JSON.parse(String(row.book_payload))),
     );
   }
   createRequest(book: CatalogBook, kind: MediaKind, user: User): { id: string; created: boolean } {

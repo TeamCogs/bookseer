@@ -166,6 +166,7 @@ test('dispatch uses official scoped book lookup/add/search, coalesces concurrenc
     if (url.pathname.endsWith('/book')) {
       assert.equal(body.mediaType, 'ebook');
       assert.equal(body.author.rootFolderPath, '/ebooks');
+      assert.equal(body.author.addOptions.monitor, 'specificBook');
       assert.equal(body.addOptions.searchForNewBook, false);
       return pending ? json({ pendingId: 99 }, 202) : json({ id: 42 });
     }
@@ -655,4 +656,61 @@ test('canonical alias resolution supports an un-echoed Goodreads ID, edition sub
   assert.equal((await adapter.lookup(requested, 'ebook')).foreignBookId, 'hc:999');
   author = 'A Different Author';
   await assert.rejects(adapter.lookup(requested, 'ebook'), /unique matching work/);
+});
+
+test('resolved canonical identity survives discovery refresh and fulfills the original request when its file appears', async (t) => {
+  const c = config();
+  Object.assign(c.connections, {
+    chaptarrUrl: 'http://chaptarr.test',
+    chaptarrApiKey: 'key',
+    ebookRootFolder: '/ebooks',
+    ebookQualityProfileId: 1,
+    ebookMetadataProfileId: 1,
+  });
+  const store = new Store(':memory:');
+  const services = new Services(c, store);
+  store.replaceInventory('chaptarr', []);
+  store.saveBook(book);
+  const actor = store.addUser({
+    username: 'owner',
+    displayName: 'Owner',
+    passwordHash: 'test',
+    role: 'admin',
+    autoApprove: true,
+    weeklyLimit: 0,
+  });
+  let files = false;
+  const canonical = {
+    id: 9,
+    title: 'Oathbringer: A Stormlight novel',
+    author: { authorName: book.author },
+    foreignBookId: 'hc:999',
+    mediaType: 'ebook',
+    hasFiles: true,
+    formats: ['EPUB'],
+  };
+  t.mock.method(globalThis, 'fetch', async (input: string, init: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith('/lookup'))
+      return json([{ ...canonical, id: 0, hasFiles: false, localEbookBooks: [] }]);
+    if (url.pathname.endsWith('/book'))
+      return json(init.method === 'POST' ? { id: 9 } : files ? [canonical] : []);
+    if (url.pathname.endsWith('/queue')) return json({ records: [], totalRecords: 0 });
+    if (url.pathname.endsWith('/command')) return json({ id: 1 });
+    throw new Error('Unexpected endpoint');
+  });
+  try {
+    const request = store.createRequest(book, 'ebook', actor);
+    await services.dispatch(request.id);
+    assert.equal(store.request(request.id)?.status, 'requested');
+    assert.ok(store.book(book.id)?.identifiers.work.includes('hc:999'));
+    store.saveBook(book);
+    assert.ok(store.book(book.id)?.identifiers.work.includes('hc:999'));
+    files = true;
+    await services.sync('chaptarr');
+    await services.refreshRequests();
+    assert.equal(store.request(request.id)?.status, 'available');
+  } finally {
+    store.close();
+  }
 });

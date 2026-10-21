@@ -201,7 +201,13 @@ export async function buildApp(
     viewer?: User,
     copies?: LibraryItem[],
   ) => {
-    const value = bookResult(book, store, config.inventoryMaxAgeHours, items, copies);
+    const value = bookResult(
+      store.book(book.id) || book,
+      store,
+      config.inventoryMaxAgeHours,
+      items,
+      copies,
+    );
     if (viewer) {
       const summaries = store.relatedRequests(book);
       value.requests = Object.fromEntries(
