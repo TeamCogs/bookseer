@@ -170,10 +170,26 @@ function normalizedItem(item: LibraryItem) {
   return value;
 }
 function completeAuthor(author: string): boolean {
+  if (!knownAuthor(author)) return false;
   return (
     author.split(' ').length >= 2 ||
     (author.length >= 2 &&
       /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(author))
+  );
+}
+function knownAuthor(author: string): boolean {
+  return (
+    Boolean(author) &&
+    ![
+      'unknown',
+      'unknown author',
+      'unknown authors',
+      'various',
+      'various authors',
+      'n a',
+      'none',
+      'not available',
+    ].includes(author)
   );
 }
 export function sourceIsFresh(
@@ -418,7 +434,7 @@ export function groupInventory(
   const workOwners = new Map<string, LibraryItem[]>();
   for (const item of items) {
     const n = normalizedItem(item);
-    if (!n.title || !n.author) continue;
+    if (!n.title || !knownAuthor(n.author)) continue;
     const key = `${n.title}|${n.author}`;
     const previous = keys.get(key);
     if (previous) union(previous, item.id);

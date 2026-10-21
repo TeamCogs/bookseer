@@ -54,8 +54,10 @@ test('dedupe preserves parts, volumes, collections, distinct authors and incompl
     { ...item, id: 'author', author: 'Different Author' },
     { ...item, id: 'unknown1', title: 'Untitled', author: '' },
     { ...item, id: 'unknown2', title: 'Untitled', author: '' },
+    { ...item, id: 'placeholder1', title: 'Untitled', author: 'Unknown Author' },
+    { ...item, id: 'placeholder2', title: 'Untitled', author: 'Unknown Author' },
   ];
-  assert.equal(groupInventory(copies).length, 6);
+  assert.equal(groupInventory(copies).length, 8);
 });
 
 test('shared work identities group canonical subtitles and expanded author names without grouping parts or conflicting authors', () => {
