@@ -178,20 +178,20 @@ function completeAuthor(author: string): boolean {
   );
 }
 function knownAuthor(author: string): boolean {
-  return (
-    Boolean(author) &&
-    ![
-      'unknown',
-      'unknown author',
-      'unknown authors',
-      'various',
-      'various authors',
-      'n a',
-      'none',
-      'not available',
-    ].includes(author)
-  );
+  return Boolean(author) && !placeholderAuthors.has(author);
 }
+const placeholderAuthors = new Set(
+  [
+    'unknown',
+    'unknown author',
+    'unknown authors',
+    'various',
+    'various authors',
+    'n a',
+    'none',
+    'not available',
+  ].map(normalizeAuthor),
+);
 export function sourceIsFresh(
   state: SourceState | undefined,
   maxAgeHours: number,
