@@ -241,7 +241,8 @@ export function matchAvailability(
       exact.push(item);
     else if (
       sameIdentifier ||
-      (titleEqual && (!author || !itemAuthor || overlap(author, itemAuthor) >= 0.5)) ||
+      (titleEqual &&
+        (!knownAuthor(author) || !knownAuthor(itemAuthor) || overlap(author, itemAuthor) >= 0.5)) ||
       (overlap(title, itemTitle) >= 0.6 && overlap(author, itemAuthor) >= 0.5)
     )
       candidates.push(item);

@@ -50,6 +50,16 @@ test('validates ISBN checksums and converts ISBN-10 to ISBN-13', () => {
   assert.equal(normalizeIsbn('9780765326370'), undefined);
 });
 test('parts, volumes, collections and conflicting authors require identity review', () => {
+  assert.equal(
+    matchAvailability(
+      book,
+      'ebook',
+      [{ ...item, title: book.title, author: 'Unknown Author' }],
+      fresh(),
+      24,
+    ).status,
+    'needs_review',
+  );
   for (const title of ['Oathbringer Part One', 'Oathbringer Volume 2', 'Oathbringer Omnibus']) {
     assert.equal(
       matchAvailability(
