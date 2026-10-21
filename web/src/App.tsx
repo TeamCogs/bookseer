@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowRight,
   Bell,
@@ -190,6 +190,10 @@ function Login({ onSession }: { onSession: (s: Session) => void }) {
 function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut: () => void }) {
   const [page, setPage] = useState<Page>('discover');
   const [menu, setMenu] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const sidebar = useRef<HTMLElement>(null);
+  useEffect(() => { if (menu) sidebar.current?.querySelector<HTMLButtonElement>('button')?.focus(); }, [menu]);
+  const closeMenu = () => { setMenu(false); menuButton.current?.focus(); };
   const [query, setQuery] = useState('');
   const [submitted, setSubmitted] = useState('');
   const [status, setStatus] = useState<AppStatus | null>(null);
@@ -237,7 +241,7 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
   }, [toast]);
   const nav = (next: Page) => {
     setPage(next);
-    setMenu(false);
+    if (menu) closeMenu();
     setError('');
   };
   const search = (event: FormEvent) => {
@@ -284,7 +288,7 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
       <a className="skip-link" href="#content">
         Skip to content
       </a>
-      <aside className={`sidebar ${menu ? 'is-open' : ''}`}>
+      <aside id="sidebar-nav" ref={sidebar} className={`sidebar ${menu ? 'is-open' : ''}`} onKeyDown={e => { if (e.key === 'Escape' && menu) closeMenu(); }}>
         <Brand />
         <div className="sidebar-group-label">YOUR READING ROOM</div>
         <nav aria-label="Main navigation">
@@ -327,7 +331,7 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
         <button
           className="menu-scrim"
           aria-label="Close navigation"
-          onClick={() => setMenu(false)}
+          onClick={closeMenu}
         />
       ) : null}
       <div className="main-shell">
@@ -335,6 +339,9 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
           <button
             className="icon-button mobile-menu"
             aria-label="Open navigation"
+            aria-controls="sidebar-nav"
+            aria-expanded={menu}
+            ref={menuButton}
             onClick={() => setMenu(!menu)}
           >
             <Menu />

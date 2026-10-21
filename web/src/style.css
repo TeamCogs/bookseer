@@ -2115,3 +2115,10 @@ select {
   gap: 18px;
   margin: 0 0 20px;
 }
+@media (max-width: 760px) {
+  .sidebar { visibility: hidden; }
+  .sidebar.is-open { visibility: visible; }
+}
+@media (max-width: 500px) {
+  .hero-art { display: none; }
+}

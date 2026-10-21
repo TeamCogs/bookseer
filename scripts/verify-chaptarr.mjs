@@ -61,16 +61,12 @@ const c = loadConfig({
 }).connections;
 const adapter = new Chaptarr(c);
 assert.deepEqual(await adapter.inventory(), []);
-const found = await api(
-  '/book/lookup?term=' + encodeURIComponent('Frankenstein Mary Shelley') + '&mediaType=ebook',
-);
+const found = await api('/book/lookup?term=ol%3AOL450063W&mediaType=ebook');
 assert.ok(
   Array.isArray(found) && found.length,
   'Upstream metadata must return the public-domain test work.',
 );
-const candidate = found.find(
-  (b) => /^frankenstein$/i.test(b.title) && /mary.*shelley/i.test(b.author?.authorName || ''),
-);
+const candidate = found.find((b) => /^frankenstein\b/i.test(b.title) && /mary.*shelley/i.test(b.author?.authorName || ''));
 assert.ok(candidate, 'A unique complete Frankenstein work is required.');
 const request = {
   id: 'compatibility:frankenstein',
