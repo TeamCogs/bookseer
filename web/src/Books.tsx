@@ -269,6 +269,7 @@ export function BookDialog({
                   className="button primary full"
                   disabled={
                     busy ||
+                    result.requestPolicy?.[kind] === false ||
                     Boolean(result.requests?.[kind]?.following && !missingAgain) ||
                     ['rejected', 'cancelled'].includes(result.requests?.[kind]?.status || '')
                   }
@@ -283,6 +284,9 @@ export function BookDialog({
                         : 'Follow existing request'
                       : `${user.role === 'admin' || user.autoApprove ? 'Request' : 'Request approval'} ${kind}`}
                 </button>
+              ) : null}
+              {availability.status === 'not_found' && result.requestPolicy?.[kind] === false ? (
+                <p className="muted small">{result.requestPolicy.message}</p>
               ) : null}
               {availability.candidates.length ? (
                 <div className="candidate-list">

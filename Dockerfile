@@ -5,6 +5,8 @@ RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY tsconfig*.json vite.config.ts ./
+COPY scripts/render-policy.mjs ./scripts/render-policy.mjs
+COPY docs/privacy.md ./docs/privacy.md
 COPY server ./server
 COPY shared ./shared
 COPY web ./web

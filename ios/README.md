@@ -10,6 +10,8 @@ Choose **Take a look around** for an isolated sample reading room. Requests in s
 
 To install on an iPhone, select your development team under **Signing & Capabilities**, connect the device, select it as the destination, and run. Device signing, TestFlight, and App Store distribution are separate from the unsigned simulator build.
 
+For signed archives, review-server requirements, and App Store Connect metadata, see [TestFlight preparation](TESTFLIGHT.md).
+
 ## Connect at home and away
 
 Choose **Connect your server**, give the server a name, and add locations in preference order. For example:

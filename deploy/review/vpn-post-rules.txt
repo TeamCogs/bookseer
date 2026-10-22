@@ -1,0 +1,12 @@
+# This file corresponds to compose.yaml's default dedicated review subnet.
+# Never attach this chain to an existing household tunnel.
+iptables -N REVIEW_EGRESS_GUARD
+iptables -A REVIEW_EGRESS_GUARD -p tcp -d 172.31.95.10/32 --dport 8090 -j ACCEPT
+iptables -A REVIEW_EGRESS_GUARD -p tcp --sport 8088 -d 172.31.95.0/24 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+iptables -A REVIEW_EGRESS_GUARD -p tcp -j DROP
+iptables -A REVIEW_EGRESS_GUARD -m mark --mark 0xca6c -j RETURN
+iptables -A REVIEW_EGRESS_GUARD -j DROP
+iptables -I OUTPUT 1 -o eth0 -j REVIEW_EGRESS_GUARD
+ip6tables -I OUTPUT 1 -o eth0 -j DROP
+iptables -I INPUT 1 -i eth0 -p tcp -m multiport --dports 53,8000,8888 -j DROP
+iptables -I INPUT 1 -i eth0 -p udp --dport 53 -j DROP

@@ -8,12 +8,14 @@ import type { LibraryAdapter } from './integrations/library.js';
 import { IntegrationError } from './integrations/http.js';
 import { Chaptarr, LookupPendingError, PendingAddError } from './integrations/chaptarr.js';
 import { OpenLibrary } from './integrations/openlibrary.js';
+import { CataloguePolicy, cataloguePolicyMessage } from './catalogue-policy.js';
 import { bookResult } from './matching.js';
 import { decrypt, encrypt } from './security.js';
 
 export class Services {
   chaptarr!: Chaptarr;
   discovery: OpenLibrary;
+  readonly catalogue: CataloguePolicy | undefined;
   connections!: ReturnType<typeof normalizeConnections>;
   private adapters = new Map<
     Source,
@@ -46,6 +48,7 @@ export class Services {
     readonly config: Config,
     readonly store: Store,
   ) {
+    this.catalogue = config.catalogueFile ? new CataloguePolicy(config.catalogueFile) : undefined;
     const saved = store.setting('connections');
     this.connect(saved ? JSON.parse(decrypt(saved, config.secret)) : config.connections);
     this.discovery = new OpenLibrary(config.contact);
@@ -100,6 +103,8 @@ export class Services {
     return adapter.cover(item);
   }
   saveConnections(input: ConnectionConfig, actor: User) {
+    if (this.catalogue)
+      throw new Error('Connections for this curated server are managed by its operator.');
     if (this.stopping) throw new Error('The server is shutting down.');
     const previous = this.connections;
     const next = normalizeConnections(input);
@@ -204,6 +209,10 @@ export class Services {
     const book = this.store.book(String(request.catalog_id));
     const kind = request.media_kind as MediaKind;
     if (!book) return;
+    if (this.catalogue && !this.catalogue.permits(book, kind)) {
+      this.store.updateRequest(id, 'needs_review', cataloguePolicyMessage);
+      return;
+    }
     const availability = bookResult(book, this.store, this.config.inventoryMaxAgeHours)
       .availability[kind];
     if (availability.status === 'available') {

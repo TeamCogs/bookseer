@@ -28,6 +28,7 @@ export interface Config {
   publicUrl: string;
   secureCookies: boolean;
   demo: boolean;
+  catalogueFile: string;
   syncIntervalMinutes: number;
   inventoryMaxAgeHours: number;
   contact: string;
@@ -80,6 +81,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     adminPassword,
     secret,
     demo,
+    catalogueFile: env.BOOKSEERR_CATALOGUE_FILE ? resolve(env.BOOKSEERR_CATALOGUE_FILE) : '',
     publicUrl: validateServiceUrl(env.BOOKSEERR_PUBLIC_URL || ''),
     secureCookies: env.BOOKSEERR_SECURE_COOKIES === 'true',
     syncIntervalMinutes: integer(env.BOOKSEERR_SYNC_INTERVAL_MINUTES, 30, 1, 1440),

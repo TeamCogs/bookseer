@@ -84,6 +84,10 @@ struct AccountView: View {
                     }
                 }.listRowBackground(Theme.panel)
             }
+            Section("About") {
+                NavigationLink("Privacy policy") { PrivacyView() }
+                Link("Support", destination: URL(string: "https://github.com/TeamCogs/bookseerr/issues")!)
+            }.listRowBackground(Theme.panel)
             Section {
                 Button(store.isDemo ? "Leave sample library" : "Sign out", role: .destructive) { Task { await store.signOut() } }
                 if !store.isDemo { Button("Remove this device’s saved session", role: .destructive) { showForget = true } }
@@ -94,6 +98,26 @@ struct AccountView: View {
             .confirmationDialog("Remove the session from this device?", isPresented: $showForget) {
                 Button("Remove saved session", role: .destructive) { store.forgetSession() }
             } message: { Text("This signs out on this device. If the server is offline, its session cannot be revoked remotely and will expire on the server’s schedule.") }
+    }
+}
+
+struct PrivacyView: View {
+    @Environment(AppStore.self) private var store
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Your library, your server").font(.title2.weight(.semibold))
+                Text("Bookseerr sends your sign-in, searches, book requests, and approval actions to the server you configure. Passwords are not saved in the app. Your session stays in this device’s Keychain; saved server addresses stay in app preferences. Each address you add to a profile is trusted to receive that server’s session.")
+                Text("No advertising or analytics SDKs are included. The app does not read your location or Wi-Fi network name. Catalogue artwork and connected readers may contact their own services. Your server may use Open Library for discovery and Chaptarr and its configured providers for acquisition.")
+                Text("Sign out to revoke an online session, or remove a saved server to remove its local session. Server-side account and activity records remain under the control of that server’s administrator. Contact the administrator for access, correction, retention, or deletion requests.")
+                Text("The project’s review service uses shared test accounts and a restricted public-domain catalogue. Its operator can access account activity and operational logs. Do not enter personal or confidential information. Review data is normally retained for no more than 90 days after the relevant review completes, with security and legal exceptions.")
+                if let address = store.status?.privacyUrl, let url = URL(string: address), url.scheme == "https" {
+                    Link("Read this server’s full privacy policy", destination: url)
+                }
+                Link("Contact Bookseerr support", destination: URL(string: "https://github.com/TeamCogs/bookseerr/issues")!)
+                Text("Effective October 22, 2026").font(.caption).foregroundStyle(Theme.muted)
+            }.padding(24).foregroundStyle(Theme.text)
+        }.background(Theme.background).navigationTitle("Privacy").navigationBarTitleDisplayMode(.inline)
     }
 }
 

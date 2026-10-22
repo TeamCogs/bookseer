@@ -75,6 +75,9 @@ struct BookDetailView: View {
                     .font(.footnote).foregroundStyle(Theme.gold)
             }
             if value.status == .notFound {
+                if let policy = result.requestPolicy, !policy[kind] {
+                    Text(policy.message).font(.footnote).foregroundStyle(Theme.muted)
+                }
                 Button { Task { await request(kind) } } label: {
                     HStack {
                         if busy { ProgressView().tint(Theme.background) }

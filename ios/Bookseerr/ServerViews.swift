@@ -48,6 +48,8 @@ struct WelcomeView: View {
                     }
                     Text("Connect to your own self-hosted Bookseerr server. Sample mode uses an isolated library and sends no downloads.")
                         .font(.caption).foregroundStyle(Theme.muted).frame(maxWidth: .infinity).multilineTextAlignment(.center)
+                    NavigationLink("Privacy policy") { PrivacyView() }
+                        .font(.footnote).frame(maxWidth: .infinity)
                 }.padding(24)
             }.background(Theme.background)
                 .sheet(item: $editor) { ServerEditor(profile: $0) }

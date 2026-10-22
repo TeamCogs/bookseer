@@ -19,6 +19,7 @@ import { normalizeConnections } from './library-config.js';
 import { libraryProviders } from '../shared/libraries.js';
 import { Store } from './store.js';
 import { Services } from './services.js';
+import { cataloguePolicyMessage } from './catalogue-policy.js';
 import { libraryAdapter } from './integrations/libraries.js';
 import { selectedLibraries } from './integrations/library.js';
 import { Chaptarr } from './integrations/chaptarr.js';
@@ -193,6 +194,8 @@ export async function buildApp(
     version: '0.1.0',
     demo: config.demo,
     sources: store.states(),
+    catalogueRestricted: Boolean(services.catalogue),
+    privacyUrl: config.publicUrl ? config.publicUrl + '/privacy.html' : undefined,
     libraryCount: groupInventory(store.inventory(), store.libraryGroups()).filter((g) =>
       g.copies.some((i) => i.available),
     ).length,
@@ -216,6 +219,12 @@ export async function buildApp(
       items,
       copies,
     );
+    if (services.catalogue)
+      value.requestPolicy = {
+        ebook: services.catalogue.permits(book, 'ebook'),
+        audiobook: services.catalogue.permits(book, 'audiobook'),
+        message: cataloguePolicyMessage,
+      };
     if (viewer) {
       const summaries = store.relatedRequests(book);
       value.requests = Object.fromEntries(
@@ -262,7 +271,10 @@ export async function buildApp(
         });
       let discovery: CatalogBook[] = [];
       let warning: string | undefined;
-      if (req.query.scope !== 'local' && query.length >= 2 && !config.demo) {
+      if (req.query.scope !== 'local' && services.catalogue) {
+        discovery = services.catalogue.search(query);
+        discovery.forEach((book) => store.saveBook(book));
+      } else if (req.query.scope !== 'local' && query.length >= 2 && !config.demo) {
         try {
           discovery = await services.discovery.search(query);
           discovery.forEach((book) => store.saveBook(book));
@@ -493,6 +505,8 @@ export async function buildApp(
     async (req, reply) => {
       const book = store.book(req.body.catalogId);
       if (!book) throw new AppError(404, 'Search for the book before requesting it.');
+      if (services.catalogue && !services.catalogue.permits(book, req.body.mediaKind))
+        throw new AppError(403, cataloguePolicyMessage);
       const availability = result(book).availability[req.body.mediaKind];
       if (availability.status !== 'not_found')
         throw new AppError(
@@ -526,6 +540,11 @@ export async function buildApp(
       const record = store.request(req.params.id);
       if (!record) throw new AppError(404, 'Request not found.');
       const action = req.params.action;
+      if (['approve', 'retry'].includes(action) && services.catalogue) {
+        const book = store.book(String(record.catalog_id));
+        if (!book || !services.catalogue.permits(book, record.media_kind as MediaKind))
+          throw new AppError(403, cataloguePolicyMessage);
+      }
       if (action === 'approve') {
         admin(req);
         if (
@@ -778,6 +797,8 @@ export async function buildApp(
     async (req) => {
       admin(req);
       if (config.demo) throw new AppError(409, 'Demo connections cannot be changed.');
+      if (services.catalogue)
+        throw new AppError(403, 'Connections for this curated server are managed by its operator.');
       const input = connectionInput(req.body);
       const ch = new Chaptarr(input);
       const libraries = Promise.all(
@@ -846,6 +867,8 @@ export async function buildApp(
     async (req) => {
       const actor = admin(req);
       if (config.demo) throw new AppError(409, 'Demo connections cannot be changed.');
+      if (services.catalogue)
+        throw new AppError(403, 'Connections for this curated server are managed by its operator.');
       const input = connectionInput(req.body);
       services.saveConnections(input, actor);
       await services.syncAll();

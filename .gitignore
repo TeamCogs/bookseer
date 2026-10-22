@@ -1,5 +1,7 @@
 node_modules/
 dist/
+web/public/privacy.html
+deploy/review/__pycache__/
 .env
 .env.*
 !.env.example
