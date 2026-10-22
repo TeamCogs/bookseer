@@ -15,7 +15,17 @@ The BookOrbit, Grimmory, and Audiobookshelf connectors support multiple named co
 | Outage and recovery            | The Audiobookshelf fixture returned HTTP 503. A browser-triggered sync retained all three copies, kept the ebook available, and marked the audiobook “Last seen in library” without offering a duplicate request. Restoring the fixture and syncing returned all three library connections to healthy.                                                                                         |
 | Secrets and UI                 | Settings readback omitted passwords and tokens; the isolated database did not contain the test credentials in plaintext. Browser console inspection returned no errors.                                                                                                                                                                                                                        |
 
-These new connector checks use controlled HTTP fixtures, not live Grimmory or Audiobookshelf installations. Their actual downloads, imports, watchers, filesystem behavior, and reading clients still need a representative pilot. The older NAS deployment evidence below applies to its recorded BookOrbit revision. The multiple-server changes have not been deployed to the NAS as part of this implementation.
+These new connector checks use controlled HTTP fixtures, not live Grimmory or Audiobookshelf installations. Neither Grimmory nor Audiobookshelf has been tested in production. Their actual downloads, imports, watchers, filesystem behavior, and reading clients still need a representative pilot. The production upgrade below verifies the existing BookOrbit and Chaptarr connections. Multiple simultaneous library-server connections were exercised against fixtures.
+
+## Multiple-server production upgrade, 2026-10-21
+
+Application code `c28e420ae2cef97681230f9accebb1f0d508a47d` was committed, pushed, and published for x86-64 and ARM64. The x86-64 NAS was upgraded to the pinned image `ghcr.io/teamcogs/bookseerr@sha256:42cd1f8c66d579faaab9f89f89147fe044a7c0e3706314c7535a6638bf818bed` after a consistent SQLite backup passed its integrity check and the matching environment was saved privately.
+
+The existing BookOrbit and Chaptarr connection checks and complete inventory reads passed. Production retained 8,457 grouped books, 12,518 format records (12,514 from BookOrbit and four from Chaptarr), both user accounts, the existing request, and the saved duplicate group. Existing copy IDs and ebook ownership remained intact for the checked titles. An owned-ebook request returned HTTP 409 without adding or dispatching a request.
+
+The production browser check confirmed sign-in, the migrated Library servers interface, stored credential reuse, accessible BookOrbit library choices, and named Chaptarr destinations and profiles. The updated container passed its health check, retained the same VPN network namespace, and left every other running container unchanged. The temporary maintenance container and its Docker administrator access were removed after deployment. A subsequent production read confirmed both sources were still healthy.
+
+Grimmory and Audiobookshelf are untested in production; neither server is installed in this production environment. This upgrade verifies existing inventory and request protection. The earlier acquisition and import record below remains separate evidence for that workflow.
 
 ## Docker deployment, 2026-10-21
 
