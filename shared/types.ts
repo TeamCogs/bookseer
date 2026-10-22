@@ -65,6 +65,7 @@ export interface BookResult {
   availability: Record<MediaKind, Availability>;
   requests?: Partial<Record<MediaKind, { id: string; status: RequestStatus; following: boolean }>>;
   copies?: LibraryItem[];
+  requestPolicy?: { ebook: boolean; audiobook: boolean; message: string };
 }
 export interface LibraryGroup {
   id: string;

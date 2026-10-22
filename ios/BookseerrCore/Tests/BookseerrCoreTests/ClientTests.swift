@@ -227,6 +227,16 @@ final class ClientTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(items?.first(where: { $0.name == "q" })?.value, "A & B")
     }
 
+    func testServerCataloguePolicyDisablesUnlistedFormats() async throws {
+        var result = await DemoService().search(query: "Dracula", scope: "all").discovery[0]
+        XCTAssertTrue(result.canRequest(.ebook))
+        XCTAssertTrue(result.canRequest(.audiobook))
+        result.requestPolicy = RequestPolicy(ebook: true, audiobook: false, message: "Ebooks only on this server.")
+        let decoded = try JSONDecoder().decode(BookResult.self, from: JSONEncoder().encode(result))
+        XCTAssertTrue(decoded.canRequest(.ebook))
+        XCTAssertFalse(decoded.canRequest(.audiobook))
+    }
+
     func testActualBackendResponseContracts() throws {
         guard let path = ProcessInfo.processInfo.environment["BOOKSEERR_CONTRACT_FIXTURE"] else {
             throw XCTSkip("Generate an isolated backend fixture with ios/scripts/export-api-contract.mjs to run the cross-language contract check.")

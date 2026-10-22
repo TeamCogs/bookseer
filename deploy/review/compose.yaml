@@ -1,0 +1,195 @@
+name: bookseerr-review
+services:
+  bookseerr:
+    image: bookseerr-review:${REVIEW_REVISION:?Set the reviewed source revision}
+    build:
+      context: ../..
+    init: true
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 5057
+      BOOKSEERR_DATA_DIR: /data
+      BOOKSEERR_DEMO: 'false'
+      BOOKSEERR_CATALOGUE_FILE: /policy/catalogue.json
+      BOOKSEERR_SECURE_COOKIES: 'true'
+      BOOKSEERR_SYNC_INTERVAL_MINUTES: '1'
+      BOOKSEERR_PUBLIC_URL: ${BOOKSEERR_PUBLIC_URL:?Public review URL required}
+      BOOKSEERR_ADMIN_USERNAME: review-admin
+      BOOKSEERR_ADMIN_PASSWORD: ${BOOKSEERR_ADMIN_PASSWORD:?Private review administrator password required}
+      BOOKSEERR_SESSION_SECRET: ${BOOKSEERR_SESSION_SECRET:?Private session key required}
+      CHAPTARR_URL: http://chaptarr:8789
+      CHAPTARR_API_KEY: ${CHAPTARR_API_KEY:?Private Chaptarr API key required}
+      CHAPTARR_EBOOK_ROOT_FOLDER: /media/books
+      CHAPTARR_EBOOK_QUALITY_PROFILE_ID: ${CHAPTARR_EBOOK_QUALITY_PROFILE_ID:-0}
+      CHAPTARR_EBOOK_METADATA_PROFILE_ID: ${CHAPTARR_EBOOK_METADATA_PROFILE_ID:-0}
+      CHAPTARR_AUDIOBOOK_ROOT_FOLDER: ''
+      BOOKORBIT_URL: http://bookorbit:3000
+      BOOKORBIT_PUBLIC_URL: ${BOOKORBIT_PUBLIC_URL:?Public reader URL required}
+      BOOKORBIT_USERNAME: ${BOOKORBIT_USERNAME:-review-connector}
+      BOOKORBIT_PASSWORD: ${BOOKORBIT_PASSWORD:?Private reader connector password required}
+      BOOKORBIT_LIBRARY_IDS: ${BOOKORBIT_LIBRARY_IDS:-}
+    ports: ['${REVIEW_BIND_ADDRESS:-127.0.0.1}:${REVIEW_APP_PORT:-15057}:5057']
+    volumes:
+      - app_data:/data
+      - ${REVIEW_CATALOGUE_FILE:?Approved catalogue required}:/policy/catalogue.json:ro
+    read_only: true
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=64m']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 45s
+    mem_limit: 512m
+    networks: [review]
+
+  source:
+    image: python:3.13-alpine
+    restart: unless-stopped
+    user: '1000:1000'
+    command: [python3, -B, /source/source.py]
+    environment:
+      SOURCE_BASE_URL: http://${REVIEW_SOURCE_IP:-172.31.95.10}:8090
+    volumes:
+      - ./source.py:/source/source.py:ro
+      - ${REVIEW_CATALOGUE_FILE:?Approved catalogue required}:/source/catalogue.json:ro
+      - ${REVIEW_ASSETS_PATH:?Verified assets required}:/assets:ro
+    networks:
+      review:
+        ipv4_address: ${REVIEW_SOURCE_IP:-172.31.95.10}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+
+  chaptarr:
+    image: ${REVIEW_CHAPTARR_IMAGE:-chaptarr/chaptarr@sha256:bb00d67cbe1485d1cd61ef178362a29b42aa08f86b290841aab4b115ad2647a6}
+    restart: unless-stopped
+    environment:
+      PUID: '1000'
+      PGID: '1000'
+      UMASK: '002'
+    volumes:
+      - chaptarr_config:/config
+      - media:/media
+    networks: [review]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 45s
+    mem_limit: 1024m
+
+  vpn:
+    image: ${REVIEW_VPN_IMAGE:-qmcgaw/gluetun:latest}
+    restart: unless-stopped
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun:/dev/net/tun]
+    environment:
+      VPN_SERVICE_PROVIDER: ${REVIEW_VPN_PROVIDER:?Set the existing WireGuard provider}
+      VPN_TYPE: wireguard
+      WIREGUARD_PRIVATE_KEY: ${REVIEW_WIREGUARD_PRIVATE_KEY:?Existing VPN credential required}
+      WIREGUARD_ADDRESSES: ${REVIEW_WIREGUARD_ADDRESSES:?Existing VPN address required}
+      # A different server from the household tunnel avoids simultaneous WireGuard peer collisions.
+      SERVER_COUNTRIES: ${REVIEW_VPN_COUNTRIES:-Canada}
+      FIREWALL_INPUT_PORTS: '8088'
+      FIREWALL_OUTBOUND_SUBNETS: ${REVIEW_SUBNET:-172.31.95.0/24}
+      HTTPPROXY: 'off'
+      DNS_UPSTREAM_IPV6: 'off'
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: '1'
+      net.ipv6.conf.default.disable_ipv6: '1'
+    volumes:
+      - ./vpn-post-rules.txt:/iptables/post-rules.txt:ro
+    networks:
+      review:
+        ipv4_address: ${REVIEW_VPN_IP:-172.31.95.5}
+    mem_limit: 256m
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          '/gluetun-entrypoint healthcheck && iptables -C OUTPUT -o eth0 -j REVIEW_EGRESS_GUARD && iptables -C REVIEW_EGRESS_GUARD -j DROP',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  downloader:
+    image: ${REVIEW_QBITTORRENT_IMAGE:-lscr.io/linuxserver/qbittorrent:latest}
+    restart: unless-stopped
+    network_mode: service:vpn
+    depends_on:
+      vpn: { condition: service_healthy, restart: true }
+    environment:
+      PUID: '1000'
+      PGID: '1000'
+      WEBUI_PORT: '8088'
+    volumes:
+      - downloader_config:/config
+      - media:/media
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+
+  postgres:
+    image: pgvector/pgvector@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bookorbit_review
+      POSTGRES_PASSWORD: ${REVIEW_POSTGRES_PASSWORD:?Private database password required}
+      POSTGRES_DB: bookorbit_review
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes: [postgres_data:/var/lib/postgresql]
+    networks: [review]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U bookorbit_review -d bookorbit_review]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 768m
+
+  bookorbit:
+    image: ${REVIEW_BOOKORBIT_IMAGE:-ghcr.io/bookorbit/bookorbit@sha256:1534bc7d696179141875b0298ea7916be4469eb2eb9250347873eaaa9728b5a8}
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_USER: bookorbit_review
+      POSTGRES_PASSWORD: ${REVIEW_POSTGRES_PASSWORD:?Private database password required}
+      POSTGRES_DB: bookorbit_review
+      JWT_SECRET: ${REVIEW_READER_JWT:?Private signing key required}
+      SETUP_BOOTSTRAP_TOKEN: ${REVIEW_READER_BOOTSTRAP:?Private bootstrap key required}
+      BOOK_REQUEST_ENCRYPTION_KEY: ${REVIEW_READER_ENCRYPTION_KEY:?Private encryption key required}
+      APP_URL: ${BOOKORBIT_PUBLIC_URL:?Public reader URL required}
+      CLIENT_URL: ${BOOKORBIT_PUBLIC_URL:?Public reader URL required}
+      PUID: '1000'
+      PGID: '1000'
+      HOME: /tmp
+      BOOK_DOCK_PATH: /data/book-dock
+      LIBRARY_BROWSE_ROOT: /media/books
+      NODE_MAX_OLD_SPACE_SIZE: '1024'
+    volumes:
+      - reader_data:/data
+      - media:/media
+    ports: ['${REVIEW_BIND_ADDRESS:-127.0.0.1}:${REVIEW_READER_PORT:-13001}:3000']
+    networks: [review]
+    read_only: true
+    tmpfs: ['/tmp:size=536870912,mode=1777']
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1536m
+
+networks:
+  review:
+    ipam:
+      config:
+        - subnet: ${REVIEW_SUBNET:-172.31.95.0/24}
+
+volumes:
+  app_data:
+  chaptarr_config:
+  downloader_config:
+  media:
+  postgres_data:
+  reader_data:

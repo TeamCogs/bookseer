@@ -102,14 +102,22 @@ public struct RequestSummary: Codable, Sendable {
         Self(id: request.id, status: request.status, following: request.following)
     }
 }
+public struct RequestPolicy: Codable, Sendable {
+    public var ebook: Bool
+    public var audiobook: Bool
+    public var message: String
+    public subscript(_ kind: MediaKind) -> Bool { kind == .ebook ? ebook : audiobook }
+}
 public struct BookResult: Codable, Sendable, Identifiable {
     public var book: CatalogBook
     public var availability: FormatAvailability
     public var requests: [String: RequestSummary]?
     public var copies: [LibraryItem]?
+    public var requestPolicy: RequestPolicy?
     public var id: String { book.id }
     public func summary(for kind: MediaKind) -> RequestSummary? { requests?[kind.rawValue] }
     public func canRequest(_ kind: MediaKind) -> Bool {
+        guard requestPolicy?[kind] != false else { return false }
         guard availability[kind].status == .notFound, !availability[kind].stale else { return false }
         guard let summary = summary(for: kind) else { return true }
         if summary.status == .available { return true }
@@ -166,6 +174,7 @@ public struct SourceState: Codable, Sendable, Identifiable {
     public var title: String { name ?? (source == "bookorbit" ? "BookOrbit" : source == "chaptarr" ? "Chaptarr" : "Library server") }
 }
 public struct AppStatus: Codable, Sendable {
+    public var privacyUrl: String?
     public var version: String
     public var demo: Bool
     public var sources: [SourceState]

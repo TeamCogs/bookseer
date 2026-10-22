@@ -56,6 +56,8 @@ Grimmory, Audiobookshelf, and multiple-server behavior have automated HTTP contr
 
 ![Duplicate ebook copies grouped under one title](docs/images/duplicate-copies.jpg)
 
+For an isolated public-domain review deployment, see [the review stack](deploy/review/README.md). For signed iOS archives and Apple review preparation, see [the TestFlight guide](ios/TESTFLIGHT.md).
+
 ## Development
 
 ### iOS companion
