@@ -198,6 +198,13 @@ public actor APIClient: BookseerrService {
         if let kind { items.append(.init(name: "kind", value: kind.rawValue)) }
         return try await decode(LibraryResponse.self, path: "/library", query: items)
     }
+    public func discover(query: DiscoveryQuery = DiscoveryQuery()) async throws -> DiscoveryResponse {
+        try await decode(DiscoveryResponse.self, path: "/discover", query: [
+            .init(name: "q", value: query.q), .init(name: "topic", value: query.topic),
+            .init(name: "sort", value: query.sort), .init(name: "language", value: query.language),
+            .init(name: "era", value: query.era), .init(name: "page", value: String(query.page)),
+        ])
+    }
     public func requests() async throws -> [BookRequest] { try await decode(Items<BookRequest>.self, path: "/requests").items }
     public func request(catalogId: String, kind: MediaKind) async throws -> RequestResponse {
         try await decode(RequestResponse.self, path: "/requests", method: "POST", payload: ["catalogId": catalogId, "mediaKind": kind.rawValue])

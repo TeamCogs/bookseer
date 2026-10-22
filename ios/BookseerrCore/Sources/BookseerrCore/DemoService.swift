@@ -33,7 +33,8 @@ public actor DemoService: BookseerrService {
                 audioItem.id += "-audio"; audioItem.mediaKind = .audiobook; audioItem.formats = ["M4B"]
                 audio = Availability(status: .available, label: "In your library", reason: "An audiobook file is present in the sample library.", items: [audioItem], candidates: [], stale: false, confirmed: true)
             }
-            return BookResult(book: CatalogBook(id: "sample-\(index)", title: value.0, author: value.1, year: value.2, identifiers: identifiers, origin: "demo"), availability: FormatAvailability(ebook: value.3 ? present : missing, audiobook: audio), copies: value.3 ? [item] : [])
+            let topics = ["children", "romance", "fiction", "fiction", "horror", "science_fiction", "fantasy", "romance", "horror", "fiction", "history", "children"]
+            return BookResult(book: CatalogBook(id: "sample-\(index)", title: value.0, author: value.1, year: value.2, identifiers: identifiers, origin: "demo", subjects: [topics[index]], languages: ["eng"]), availability: FormatAvailability(ebook: value.3 ? present : missing, audiobook: audio), copies: value.3 ? [item] : [])
         }
         let date = ISO8601DateFormatter().string(from: Date())
         activity = [
@@ -65,6 +66,37 @@ public actor DemoService: BookseerrService {
     public func search(query: String, scope: String) -> SearchResponse {
         let found = books.filter { query.isEmpty || "\($0.book.title) \($0.book.author)".localizedCaseInsensitiveContains(query) }
         return SearchResponse(library: scope == "online" ? [] : found.filter { $0.availability.ebook.status == .available }.map(withRequests), discovery: scope == "local" ? [] : found.filter { $0.availability.ebook.status != .available }.map(withRequests), query: query)
+    }
+    public func discover(query: DiscoveryQuery = DiscoveryQuery()) -> DiscoveryResponse {
+        let topics = [("", "All topics"), ("fiction", "Fiction"), ("fantasy", "Fantasy"), ("science_fiction", "Science fiction"), ("romance", "Romance"), ("horror", "Horror"), ("history", "History"), ("children", "Children’s books")]
+        let filters = DiscoveryFilters(
+            topics: topics.map { DiscoveryOption(id: $0.0, label: $0.1) },
+            sorts: [("trending", "Trending"), ("popular", "Most shelved"), ("rating", "Top rated"), ("new", "Recently published")].map { DiscoveryOption(id: $0.0, label: $0.1) },
+            languages: [("", "All languages"), ("eng", "English"), ("spa", "Spanish")].map { DiscoveryOption(id: $0.0, label: $0.1) },
+            eras: [("", "Any publication date"), ("recent", "Last 5 years"), ("decade", "Last 10 years"), ("classics", "Before 1970")].map { DiscoveryOption(id: $0.0, label: $0.1) })
+        let year = Calendar(identifier: .gregorian).component(.year, from: Date())
+        let words = query.q.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        var found = books.filter { result in
+            // The sample discovery catalogue is a separate selection from the library shelf.
+            let book = result.book
+            let text = "\(book.title) \(book.author) \((book.subjects ?? []).joined(separator: " "))"
+            return result.availability.ebook.status != .available
+                && words.allSatisfy { text.localizedCaseInsensitiveContains($0) }
+                && (query.topic.isEmpty || book.subjects?.contains(query.topic) == true)
+                && (query.language.isEmpty || book.languages?.contains(query.language) == true)
+                && (query.era.isEmpty || book.year.map { value in
+                    switch query.era {
+                    case "recent": value >= year - 4 && value <= year
+                    case "decade": value >= year - 9 && value <= year
+                    case "classics": value <= 1969
+                    default: false
+                    }
+                } == true)
+        }
+        if query.sort == "new" { found.sort { ($0.book.year ?? 0) > ($1.book.year ?? 0) } }
+        let offset = max(0, query.page - 1) * 24
+        return DiscoveryResponse(items: Array(found.dropFirst(offset).prefix(24)).map(withRequests), total: found.count, hasMore: offset + 24 < found.count,
+            source: DiscoverySource(name: "Sample discovery catalogue"), page: query.page, pageSize: 24, mode: "demo", filters: filters)
     }
     public func library(query: String, kind: MediaKind?, offset: Int) -> LibraryResponse {
         let found = books.filter { book in

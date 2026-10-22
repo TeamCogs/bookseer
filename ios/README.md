@@ -30,7 +30,7 @@ Public addresses require HTTPS. Local HTTP addresses are supported through Apple
 
 ## Included
 
-- Discover: library-first search by title, author, or ISBN, plus online catalogue results.
+- Discover: external weekly trends and catalogue browsing with topics, keywords, language, and first-publication filters; direct search keeps library-first title, author, and ISBN matches.
 - Library: format filters, grouped copies, pagination, pull to refresh, and authenticated covers.
 - Book details: separate ebook and audiobook ownership, actual file presence, monitored records, stale inventories, and possible matches. Requests require confirmed absence; unknown or stale inventory does not enable them.
 - Requests: submit or follow a shared request, inspect acquisition status, and stop following. Authorized administrators can approve, decline, or reopen requests; cancellation controls follow the server’s restrictions.
@@ -68,3 +68,7 @@ Local verification on October 22, 2026:
 - Existing application checks passed: type checking, 61 behavioral tests, and the production web/server build.
 
 Live cellular-to-home switching against a deployed server, physical-device signing, and real request acquisition through the native app have not been verified. The GitHub workflow is added but has not been run remotely. Local operational screenshots and build products stay under ignored `.local/`.
+
+## Book discovery
+
+Discover opens a shared external catalogue with weekly Open Library trends, topics, keyword browsing, and language/publication filters. Sorting supports trending, most shelved, top rated, and recently published. Direct search stays at the top and keeps library-first matches. Ownership and format-specific requests work on discovery titles. No preferences or personalized ranking are stored. The server must include the `/api/discover` endpoint; older servers show an update message while search and Library remain available. Sample mode uses its separate sample catalogue and is labelled accordingly.

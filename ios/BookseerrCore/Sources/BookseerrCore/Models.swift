@@ -60,6 +60,10 @@ public struct CatalogBook: Codable, Sendable, Identifiable {
     public var coverUrl: String?
     public var identifiers: Identifiers
     public var origin: String
+    public var subjects: [String]?
+    public var languages: [String]?
+    public var rating: Double?
+    public var ratingCount: Int?
 }
 public struct LibraryItem: Codable, Sendable, Identifiable {
     public var id: String
@@ -201,6 +205,42 @@ public struct SearchResponse: Codable, Sendable {
         }
     }
 }
+public struct DiscoveryOption: Codable, Sendable, Identifiable {
+    public var id: String
+    public var label: String
+}
+public struct DiscoveryFilters: Codable, Sendable {
+    public var topics: [DiscoveryOption]
+    public var sorts: [DiscoveryOption]
+    public var languages: [DiscoveryOption]
+    public var eras: [DiscoveryOption]
+}
+public struct DiscoverySource: Codable, Sendable {
+    public var name: String
+    public var url: String?
+}
+public struct DiscoveryResponse: Codable, Sendable {
+    public var items: [BookResult]
+    public var total: Int?
+    public var hasMore: Bool
+    public var source: DiscoverySource
+    public var warning: String?
+    public var page: Int
+    public var pageSize: Int
+    public var mode: String
+    public var filters: DiscoveryFilters
+}
+public struct DiscoveryQuery: Sendable, Hashable {
+    public var q: String
+    public var topic: String
+    public var sort: String
+    public var language: String
+    public var era: String
+    public var page: Int
+    public init(q: String = "", topic: String = "", sort: String = "trending", language: String = "", era: String = "", page: Int = 1) {
+        self.q = q; self.topic = topic; self.sort = sort; self.language = language; self.era = era; self.page = page
+    }
+}
 public struct LibraryResponse: Codable, Sendable {
     public var total: Int
     public var rawCopies: Int
@@ -221,6 +261,7 @@ public protocol BookseerrService: Sendable {
     func logout() async throws
     func status() async throws -> AppStatus
     func search(query: String, scope: String) async throws -> SearchResponse
+    func discover(query: DiscoveryQuery) async throws -> DiscoveryResponse
     func library(query: String, kind: MediaKind?, offset: Int) async throws -> LibraryResponse
     func requests() async throws -> [BookRequest]
     func request(catalogId: String, kind: MediaKind) async throws -> RequestResponse

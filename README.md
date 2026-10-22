@@ -10,7 +10,8 @@ A self-hosted book discovery and request portal for Docker and NAS deployments. 
 
 ## What it does
 
-- **Your whole connected library**, including books acquired outside Bookseerr. Library results appear before online discovery results.
+- **Discover your next read.** Open Library’s weekly trends, topic shelves, keyword browsing, and language/publication-date filters. Sort by trends, most shelved, top rated, or recently published; no extra account or API key is needed.
+- **Your whole connected library**, including books acquired outside Bookseerr. The Library tab holds your collection; direct searches show library matches before online results.
 - **Multiple library servers.** Mix BookOrbit, Grimmory, and Audiobookshelf, including several servers of the same type. Each connection has its own name, library selection, credentials, and sync status.
 - **Clear ebook and audiobook ownership.** Existing files, monitored records, stale inventories, and uncertain matches are distinguished.
 - **One book, every copy.** Duplicates share one entry with all formats and source locations. Review differently named copies, save a preferred title, and undo grouping without deleting files.

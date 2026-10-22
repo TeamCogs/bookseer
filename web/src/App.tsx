@@ -13,15 +13,15 @@ import {
   Menu,
   Network,
   Search,
-  ShieldCheck,
   Users,
   X,
 } from 'lucide-react';
 import type { AppStatus, BookRequest, BookResult, Notification, User } from '../../shared/types';
 import { api, message, setCsrf, time } from './api';
-import { BookDialog, BookGrid, Cover } from './Books';
+import { BookDialog, Cover } from './Books';
 import { AccountPage, ConnectionsPage, UsersPage } from './Admin';
 import { LibraryPage } from './LibraryPage';
+import { DiscoverPage } from './DiscoverPage';
 
 type Session = { user: User | null; csrf: string | null; demo: boolean };
 type Page =
@@ -258,6 +258,11 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
     nav('discover');
     refresh();
   };
+  const discover = () => {
+    setQuery('');
+    setSubmitted('');
+    nav('discover');
+  };
   async function sync() {
     setSyncing(true);
     setError('');
@@ -283,7 +288,7 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
   const navButton = (p: Page, Icon: typeof Compass, count?: number) => (
     <button
       className={`nav-item ${page === p ? 'active' : ''}`}
-      onClick={() => nav(p)}
+      onClick={() => (p === 'discover' ? discover() : nav(p))}
       aria-current={page === p ? 'page' : undefined}
     >
       <Icon size={19} />
@@ -396,14 +401,12 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
             </p>
           ) : null}
           {page === 'discover' ? (
-            <Discover
+            <DiscoverPage
               query={submitted}
               revision={revision}
-              user={user}
-              status={status}
               select={setSelected}
               browse={() => nav('library')}
-              configure={() => nav('connections')}
+              discover={discover}
             />
           ) : null}
           {page === 'library' ? (
@@ -507,268 +510,6 @@ function Shell({ user, demo, signedOut }: { user: User; demo: boolean; signedOut
   );
 }
 
-function Discover({
-  query,
-  revision,
-  user,
-  status,
-  select,
-  browse,
-  configure,
-}: {
-  query: string;
-  revision: number;
-  user: User;
-  status: AppStatus | null;
-  select: (b: BookResult) => void;
-  browse: () => void;
-  configure: () => void;
-}) {
-  const [data, setData] = useState<{
-    library: BookResult[];
-    discovery: BookResult[];
-    warning?: string;
-  }>();
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [discovering, setDiscovering] = useState(true);
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setDiscovering(true);
-    setData(undefined);
-    setError('');
-    void api<NonNullable<typeof data>>(
-      `/search?q=${encodeURIComponent(query)}&scope=local`,
-      'GET',
-      undefined,
-      controller.signal,
-    )
-      .then((r) => {
-        if (controller.signal.aborted) return;
-        setData((current) => ({
-          library: r.library,
-          discovery: current?.discovery || [],
-          warning: current?.warning,
-        }));
-        setLoading(false);
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted) {
-          setError(message(e));
-          setLoading(false);
-        }
-      });
-    void api<NonNullable<typeof data>>(
-      `/search?q=${encodeURIComponent(query)}&scope=online`,
-      'GET',
-      undefined,
-      controller.signal,
-    )
-      .then((r) => {
-        if (controller.signal.aborted) return;
-        setData((current) => ({
-          library: current?.library || [],
-          discovery: r.discovery,
-          warning: r.warning,
-        }));
-        setDiscovering(false);
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted) {
-          setData((current) => ({
-            library: current?.library || [],
-            discovery: [],
-            warning: message(e),
-          }));
-          setDiscovering(false);
-        }
-      });
-    return () => controller.abort();
-  }, [query, revision]);
-  const connected = status?.sources.filter((s) => s.status === 'healthy').length || 0;
-  return (
-    <>
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">YOUR NEXT CHAPTER STARTS HERE</p>
-          <h1>
-            {query
-              ? `Results for “${query}”`
-              : `Welcome to your reading room${user.displayName === 'Administrator' ? '.' : `, ${user.displayName.split(' ')[0]}.`}`}
-          </h1>
-          <p>
-            {query
-              ? 'Your connected shelves come first. Request only the formats you need.'
-              : 'Find something you love. We’ll tell you if it’s already on your shelf.'}
-          </p>
-        </div>
-        <span className="pill live-status">
-          <span className={connected ? 'live-dot' : 'warning-dot'} />
-          {connected
-            ? `${connected} librar${connected === 1 ? 'y' : 'ies'} connected`
-            : 'Connect your libraries'}
-        </span>
-      </div>
-      {!query ? (
-        <section className="hero">
-          <div>
-            <span className="eyebrow">ALL YOUR SHELVES. ONE PLACE.</span>
-            <h2>
-              A good story is
-              <br />
-              closer than you think.
-            </h2>
-            <p>
-              Browse the books you own, discover something new,
-              <br className="desktop-break" /> and keep everyone’s requests together.
-            </p>
-            <button className="button primary" onClick={browse}>
-              Explore your library
-              <ArrowRight size={17} />
-            </button>
-          </div>
-          <div className="hero-art" aria-hidden="true">
-            <div className="hero-orbit" />
-            <div className="hero-book back">
-              <Headphones size={32} />
-              <span>
-                Listen.
-                <br />
-                Imagine.
-              </span>
-              <i />
-            </div>
-            <div className="hero-book front">
-              <BookOpen size={28} />
-              <span>
-                One more
-                <br />
-                <em>chapter.</em>
-              </span>
-              <i />
-            </div>
-            <span className="hero-label">
-              <Check size={14} />
-              Already on your shelf
-            </span>
-          </div>
-        </section>
-      ) : null}
-      {!query ? (
-        <div className="stat-strip">
-          <div>
-            <Library size={20} />
-            <span>
-              <strong>{status?.libraryCount.toLocaleString() ?? '—'}</strong> library books
-            </span>
-          </div>
-          <div>
-            <ListPlus size={20} />
-            <span>
-              <strong>{status?.requestCount ?? '—'}</strong> active requests
-            </span>
-          </div>
-          <div>
-            <ShieldCheck size={20} />
-            <span>
-              Shared shelves · <strong>personal accounts</strong>
-            </span>
-          </div>
-        </div>
-      ) : null}
-      {status && status.sources.some((s) => s.configured && s.status === 'error') ? (
-        <p className="alert">
-          A library needs attention. Previously seen copies remain visible; uncertain availability
-          blocks duplicate requests.
-          {user.role === 'admin' ? (
-            <button className="text-button" onClick={configure}>
-              Check connections <ArrowRight size={14} />
-            </button>
-          ) : null}
-        </p>
-      ) : null}
-      {status && !status.sources.some((s) => s.configured) ? (
-        <div className="alert">
-          Connect your library servers or Chaptarr to see your books and verify ownership.
-          {user.role === 'admin' ? (
-            <button className="text-button" onClick={configure}>
-              Set up connections
-              <ArrowRight size={14} />
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-      {error ? (
-        <p className="alert error" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {loading ? (
-        <div className="skeleton-grid" aria-label="Loading books">
-          {Array.from({ length: 6 }, (_, i) => (
-            <div className="skeleton" key={i} />
-          ))}
-        </div>
-      ) : (
-        <>
-          <section className="book-section">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">CONNECTED SHELVES</p>
-                <h2>{query ? 'In your library' : 'From your library'}</h2>
-              </div>
-              <button className="text-button" onClick={browse}>
-                View library
-                <ArrowRight size={16} />
-              </button>
-            </div>
-            {data?.library.length ? (
-              <BookGrid results={data.library.slice(0, query ? 18 : 12)} select={select} />
-            ) : (
-              <Empty
-                title={query ? 'No exact library search results' : 'Your shelves are waiting'}
-                text={
-                  query
-                    ? 'Online results below also check identifiers and related copies in your library.'
-                    : 'Connect your existing library to bring your books together here.'
-                }
-              />
-            )}
-          </section>
-          {data?.warning ? <p className="alert">{data.warning}</p> : null}
-          <section className="book-section">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">A WORLD OF STORIES</p>
-                <h2>{query ? 'Discover & request' : 'Find your next read'}</h2>
-              </div>
-              <span className="muted small">
-                {query ? 'Metadata from Open Library' : 'Search by title, author, or ISBN'}
-              </span>
-            </div>
-            {discovering ? (
-              <p className="muted small" role="status">
-                Searching the online catalogue…
-              </p>
-            ) : data?.discovery.length ? (
-              <BookGrid results={data.discovery} select={select} />
-            ) : (
-              <div className="search-prompt">
-                <Search size={25} />
-                <p>
-                  {query
-                    ? 'No online matches found. Try the title and author together.'
-                    : 'Start with a book you’ve been meaning to read.'}
-                </p>
-              </div>
-            )}
-          </section>
-        </>
-      )}
-    </>
-  );
-}
 function RequestsPage({
   requests,
   user,
