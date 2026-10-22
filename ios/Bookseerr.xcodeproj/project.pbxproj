@@ -1,0 +1,52 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 60;
+	objects = {
+		DBCC6EC1F1AFA96F954CB0CA = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
+		5F77905399E1B8038872E14B = { isa = PBXBuildFile; fileRef = DBCC6EC1F1AFA96F954CB0CA; };
+		784395B7C79B1D13F69168F9 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		B9EE49C420D829C42C3E0068 = { isa = PBXBuildFile; fileRef = 784395B7C79B1D13F69168F9; };
+		96CBCEE8095A1638CC990085 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookComponents.swift; sourceTree = "<group>"; };
+		8045B9854F476E476D1E4897 = { isa = PBXBuildFile; fileRef = 96CBCEE8095A1638CC990085; };
+		506BCF527CCA2A1140E6A1E0 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailView.swift; sourceTree = "<group>"; };
+		AD25560AC9D6119FC21BE95E = { isa = PBXBuildFile; fileRef = 506BCF527CCA2A1140E6A1E0; };
+		BED7CB55247CC42A3B4231B0 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookseerrApp.swift; sourceTree = "<group>"; };
+		DDB0B62F6308C8390F48B19A = { isa = PBXBuildFile; fileRef = BED7CB55247CC42A3B4231B0; };
+		88200440B0BE8268871FBC47 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
+		8308A385DC8A29BD15C182C8 = { isa = PBXBuildFile; fileRef = 88200440B0BE8268871FBC47; };
+		A91AAB28701DDA8FE3C92BAA = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		72E2F9A8FDD3852560E843B0 = { isa = PBXBuildFile; fileRef = A91AAB28701DDA8FE3C92BAA; };
+		CCD7A417195C801A326D1135 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestViews.swift; sourceTree = "<group>"; };
+		27FE7E7107A1A32AFD91797E = { isa = PBXBuildFile; fileRef = CCD7A417195C801A326D1135; };
+		41BEF3C131339B9142E0008F = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerViews.swift; sourceTree = "<group>"; };
+		5A4089441637943260905E1E = { isa = PBXBuildFile; fileRef = 41BEF3C131339B9142E0008F; };
+		DC96BEC8F030641B6E444118 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		0EB721D139593E6EB353FE2B = { isa = PBXBuildFile; fileRef = DC96BEC8F030641B6E444118; };
+		8B5C0B4B293AD37E73A2ADE3 = { isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D88C01B31938C10AC56FA0F7 = { isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		78B2C06D47DC5855DC46C8B9 = { isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B55AD9038637845429A02A25 = { isa = PBXBuildFile; fileRef = D88C01B31938C10AC56FA0F7; };
+		04576DF4100EA0C70A1FBBA5 = { isa = PBXBuildFile; fileRef = 78B2C06D47DC5855DC46C8B9; };
+		A8792157CB4F27FB949C035F = { isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bookseerr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0D6E4079E36703EBD37C0072 = { isa = PBXGroup; children = (E17E80AD8E2103CF3FC3FD96, 0A3E27B8CA818264D75C8D81,); sourceTree = "<group>"; };
+		E17E80AD8E2103CF3FC3FD96 = { isa = PBXGroup; children = (DBCC6EC1F1AFA96F954CB0CA, 784395B7C79B1D13F69168F9, 96CBCEE8095A1638CC990085, 506BCF527CCA2A1140E6A1E0, BED7CB55247CC42A3B4231B0, 88200440B0BE8268871FBC47, A91AAB28701DDA8FE3C92BAA, CCD7A417195C801A326D1135, 41BEF3C131339B9142E0008F, DC96BEC8F030641B6E444118, 8B5C0B4B293AD37E73A2ADE3, D88C01B31938C10AC56FA0F7, 78B2C06D47DC5855DC46C8B9,); path = Bookseerr; sourceTree = "<group>"; };
+		0A3E27B8CA818264D75C8D81 = { isa = PBXGroup; children = (A8792157CB4F27FB949C035F,); name = Products; sourceTree = "<group>"; };
+		878A52FC5FF6A57D50B7B870 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (5F77905399E1B8038872E14B, B9EE49C420D829C42C3E0068, 8045B9854F476E476D1E4897, AD25560AC9D6119FC21BE95E, DDB0B62F6308C8390F48B19A, 8308A385DC8A29BD15C182C8, 72E2F9A8FDD3852560E843B0, 27FE7E7107A1A32AFD91797E, 5A4089441637943260905E1E, 0EB721D139593E6EB353FE2B,); runOnlyForDeploymentPostprocessing = 0; };
+		41D311A605520FC7B8B9A980 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (B55AD9038637845429A02A25, 04576DF4100EA0C70A1FBBA5,); runOnlyForDeploymentPostprocessing = 0; };
+		91596F6079D535D734C1642A = { isa = PBXBuildFile; productRef = 8473FB7C391915EE75DAD5DA; };
+		E2AA269EB967A8853A258BFA = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (91596F6079D535D734C1642A,); runOnlyForDeploymentPostprocessing = 0; };
+		BC4A71180870F7945155FBB0 = { isa = XCLocalSwiftPackageReference; relativePath = BookseerrCore; };
+		8473FB7C391915EE75DAD5DA = { isa = XCSwiftPackageProductDependency; package = BC4A71180870F7945155FBB0; productName = BookseerrCore; };
+		34A04005BCAF206EEC990BD9 = { isa = PBXNativeTarget; buildConfigurationList = A1C421DAD96DFF096646A753; buildPhases = (878A52FC5FF6A57D50B7B870, E2AA269EB967A8853A258BFA, 41D311A605520FC7B8B9A980,); buildRules = (); dependencies = (); name = Bookseerr; packageProductDependencies = (8473FB7C391915EE75DAD5DA,); productName = Bookseerr; productReference = A8792157CB4F27FB949C035F; productType = "com.apple.product-type.application"; };
+		244210E48437B6556980A702 = { isa = PBXProject; attributes = { BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1600; TargetAttributes = { 34A04005BCAF206EEC990BD9 = { CreatedOnToolsVersion = 16.0; }; }; }; buildConfigurationList = A964DD4136F390AFDF0E5FBA; compatibilityVersion = "Xcode 15.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base,); mainGroup = 0D6E4079E36703EBD37C0072; packageReferences = (BC4A71180870F7945155FBB0,); productRefGroup = 0A3E27B8CA818264D75C8D81; projectDirPath = ""; projectRoot = ""; targets = (34A04005BCAF206EEC990BD9,); };
+		73EBF6644258C120893E685D = { isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_WARN_DOCUMENTATION_COMMENTS = YES; GCC_C_LANGUAGE_STANDARD = gnu17; IPHONEOS_DEPLOYMENT_TARGET = 18.0; SDKROOT = iphoneos; SWIFT_VERSION = 6.0; SWIFT_STRICT_CONCURRENCY = complete; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; GCC_PREPROCESSOR_DEFINITIONS = ("DEBUG=1", "$(inherited)"); SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ONLY_ACTIVE_ARCH = YES; }; name = Debug; };
+		0B0C687DF8B6B8DC790B519C = { isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_WARN_DOCUMENTATION_COMMENTS = YES; GCC_C_LANGUAGE_STANDARD = gnu17; IPHONEOS_DEPLOYMENT_TARGET = 18.0; SDKROOT = iphoneos; SWIFT_VERSION = 6.0; SWIFT_STRICT_CONCURRENCY = complete; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; SWIFT_COMPILATION_MODE = wholemodule; VALIDATE_PRODUCT = YES; }; name = Release; };
+		A964DD4136F390AFDF0E5FBA = { isa = XCConfigurationList; buildConfigurations = (73EBF6644258C120893E685D, 0B0C687DF8B6B8DC790B519C,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		6C7EFF6369083C8E1F2B1994 = { isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Bookseerr/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks"); MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = com.teamcogs.bookseerr; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SUPPORTS_MACCATALYST = NO; SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
+		DD75E2CB1C510A828AC72D96 = { isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Bookseerr/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks"); MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = com.teamcogs.bookseerr; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SUPPORTS_MACCATALYST = NO; SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
+		A1C421DAD96DFF096646A753 = { isa = XCConfigurationList; buildConfigurations = (6C7EFF6369083C8E1F2B1994, DD75E2CB1C510A828AC72D96,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+	};
+	rootObject = 244210E48437B6556980A702;
+}

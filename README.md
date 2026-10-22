@@ -58,6 +58,12 @@ Grimmory, Audiobookshelf, and multiple-server behavior have automated HTTP contr
 
 ## Development
 
+### iOS companion
+
+The [native iOS app](ios/README.md) supports iOS 18 and later, with book search, owned formats, requests, in-app notifications, and multiple server profiles. Each server can have several ordered addresses, automatically preferring a reachable home address and falling back to public HTTPS. Open `ios/Bookseerr.xcodeproj` in Xcode, or explore the built-in sample library without a server. See the [iOS guide](ios/README.md) for signing, connection setup, and verification limits.
+
+### Web and server
+
 Use Node.js 24 and the pinned pnpm version through Corepack.
 
 ```sh
