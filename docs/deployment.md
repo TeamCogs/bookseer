@@ -86,7 +86,7 @@ The project is now **Bookseerr**, at `https://github.com/TeamCogs/bookseerr`, an
 3. In the private environment file, change the `BOOKSEER_` variable prefix to `BOOKSEERR_`, preserving every value. Set `BOOKSEERR_DATA_VOLUME` to the exact old volume name from step 1. The new default is `bookseerr_data`; using a different empty volume would create a new installation. For Portainer, make the equivalent changes in the stack's environment.
 4. Start with `docker compose up -d` and verify your existing users, library, requests, and saved connections before removing the stopped old container. Sign in again; the session cookie has the corrected name.
 
-The server accepts the original environment prefix as a fallback, with corrected variables taking precedence. Fresh installations use `bookseerr.sqlite`; an existing `bookseer.sqlite` is opened in place, including its journal, so saved data survives without moving live SQLite files. Original private data directories remain excluded from Git and Docker build contexts. The earlier Docker package remains a historical artifact; use the corrected image for updates.
+The server accepts the original environment prefix as a fallback, with corrected variables taking precedence. Fresh installations use `bookseerr.sqlite`; an existing `bookseer.sqlite` is opened in place, including its journal, so saved data survives without moving live SQLite files. Original private data directories remain excluded from Git and Docker build contexts. The old `ghcr.io/teamcogs/bookseer` package has been removed. Use `ghcr.io/teamcogs/bookseerr` for installations and updates; existing deployments must use this image before recreating their containers.
 
 ## Backup and restore
 
