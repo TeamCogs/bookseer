@@ -1,0 +1,45 @@
+name: Verify Bookseerr iOS
+on:
+  push:
+    branches: [main]
+    paths:
+      [
+        'ios/**',
+        'server/**',
+        'shared/**',
+        'package.json',
+        'pnpm-lock.yaml',
+        '.github/workflows/ios.yml',
+      ]
+  pull_request:
+    paths:
+      [
+        'ios/**',
+        'server/**',
+        'shared/**',
+        'package.json',
+        'pnpm-lock.yaml',
+        '.github/workflows/ios.yml',
+      ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Test native routing, request safety, and actual API contracts
+        run: bash ios/scripts/check.sh
+      - name: Build the iPhone and iPad app without signing
+        run: >-
+          xcodebuild -project ios/Bookseerr.xcodeproj -scheme Bookseerr
+          -configuration Debug -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/bookseerr-ios"
+          CODE_SIGNING_ALLOWED=NO build

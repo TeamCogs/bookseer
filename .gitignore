@@ -14,4 +14,11 @@ coverage/
 *.log
 .DS_Store
 artifacts/private/
+ios/.local/
+ios/**/.build/
+ios/**/.swiftpm/
+ios/**/xcuserdata/
+ios/**/*.xcuserstate
+ios/DerivedData/
+ios/build/
 
