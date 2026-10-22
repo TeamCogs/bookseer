@@ -4,13 +4,14 @@
 
 **Your books. Everyone's next read.**
 
-A self-hosted book discovery and request portal for Docker and NAS deployments. Bring your existing [BookOrbit](https://github.com/bookorbit/bookorbit) library together with official [Chaptarr](https://github.com/Chaptarr/chaptarr), see what you already own, and request the formats you're missing.
+A self-hosted book discovery and request portal for Docker and NAS deployments. Connect [BookOrbit](https://github.com/bookorbit/bookorbit), [Grimmory](https://github.com/grimmory-tools/grimmory), or [Audiobookshelf](https://github.com/advplyr/audiobookshelf) with official [Chaptarr](https://github.com/Chaptarr/chaptarr), see what you already own, and request the formats you're missing.
 
 ![Bookseerr reading room with sample books and a reader account](docs/images/reading-room.jpg)
 
 ## What it does
 
 - **Your whole connected library**, including books acquired outside Bookseerr. Library results appear before online discovery results.
+- **Multiple library servers.** Mix BookOrbit, Grimmory, and Audiobookshelf, including several servers of the same type. Each connection has its own name, library selection, credentials, and sync status.
 - **Clear ebook and audiobook ownership.** Existing files, monitored records, stale inventories, and uncertain matches are distinguished.
 - **One book, every copy.** Duplicates share one entry with all formats and source locations. Review differently named copies, save a preferred title, and undo grouping without deleting files.
 - **Multiple readers.** Administrator and reader accounts, approval controls, rolling request limits, shared requests, password management, and personal notifications.
@@ -41,15 +42,17 @@ The public image is `ghcr.io/teamcogs/bookseerr:latest`, with x86-64 and ARM64 v
 
 ## How it fits
 
-Bookseerr handles discovery, ownership, users, approvals, and request tracking. Chaptarr handles indexers, downloads, and imports. BookOrbit supplies your existing inventory and remains the reader. Bookseerr's integration does not edit BookOrbit metadata or library files.
+Bookseerr handles discovery, ownership, users, approvals, and request tracking. Chaptarr handles indexers, downloads, and imports. Your connected BookOrbit, Grimmory, and Audiobookshelf servers supply inventory and remain the readers. Bookseerr reads their inventory and covers without editing metadata or library files. Existing BookOrbit settings migrate automatically, preserving saved copy identities and reviews.
 
 Successful complete inventory snapshots establish availability. A failed or partial sync preserves the previous snapshot and cannot prove a book is absent. Uncertain submissions require review rather than automatic replay. [Read the architecture](docs/architecture.md).
+
+Add servers in **Connections → Library servers**. BookOrbit and Grimmory use a username and password; Audiobookshelf uses an API token. You can select libraries by name after checking the connections. For example, connect Grimmory for ebooks and Audiobookshelf for audio, with both formats shown under one book. Chaptarr's import destinations must be included in the relevant server's watched or regularly scanned library folders.
 
 ## Status and validation
 
 This is an actively developed independent project. Automated tests cover account boundaries, request safety, matching, grouping, persistence, and upstream HTTP contracts. CI builds and runs the hardened production container on x86-64 and ARM64. A live Docker deployment has verified existing BookOrbit ownership and a public-domain ebook request through official Chaptarr, qBittorrent, automatic import, and BookOrbit inventory. The download used a labelled test source rather than a public tracker search result. See the [live verification record and limits](docs/validation.md), and check the workflow for the revision you deploy.
 
-See [implemented features and verification scope](docs/features.md). Bookseerr does not claim all Seerr features: external notification delivery, SSO, reading sync, ebook conversion, and indexer management are not implemented.
+Grimmory, Audiobookshelf, and multiple-server behavior have automated HTTP contract coverage; live download/import verification with those two servers remains pending. See [implemented features and verification scope](docs/features.md). Bookseerr does not claim all Seerr features: external notification delivery, SSO, reading sync, ebook conversion, and indexer management are not implemented.
 
 ![Duplicate ebook copies grouped under one title](docs/images/duplicate-copies.jpg)
 
@@ -70,4 +73,4 @@ The development interface is at `http://127.0.0.1:5173`; its API proxy uses port
 
 Maintained by [Scott / TeamCogs](https://github.com/TeamCogs). Code contributions are currently owner-only; bug reports and suggestions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-[MIT](LICENSE). Bookseerr is an independent application and is not affiliated with or endorsed by Chaptarr, BookOrbit, or Seerr. Upstream projects and Open Library retain their respective names, licenses, and data policies.
+[MIT](LICENSE). Bookseerr is an independent application and is not affiliated with or endorsed by Chaptarr, BookOrbit, Grimmory, Audiobookshelf, or Seerr. Upstream projects and Open Library retain their respective names, licenses, and data policies.

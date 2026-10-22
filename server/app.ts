@@ -10,16 +10,19 @@ import type {
   CatalogBook,
   LibraryItem,
   MediaKind,
-  Source,
+  LibraryServerConfig,
   User,
 } from '../shared/types.js';
 import type { Config, ConnectionConfig } from './config.js';
 import { validateServiceUrl } from './config.js';
+import { normalizeConnections } from './library-config.js';
+import { libraryProviders } from '../shared/libraries.js';
 import { Store } from './store.js';
 import { Services } from './services.js';
-import { BookOrbit } from './integrations/bookorbit.js';
+import { libraryAdapter } from './integrations/libraries.js';
+import { selectedLibraries } from './integrations/library.js';
 import { Chaptarr } from './integrations/chaptarr.js';
-import { array, object, readJson } from './integrations/http.js';
+import { array, object } from './integrations/http.js';
 import { bookResult, groupInventory, itemAsBook, searchInventory } from './matching.js';
 import { equal, hashPassword, verifyPassword } from './security.js';
 
@@ -189,7 +192,7 @@ export async function buildApp(
   app.get('/api/status', async (req) => ({
     version: '0.1.0',
     demo: config.demo,
-    sources: (['bookorbit', 'chaptarr'] as Source[]).map((source) => store.state(source)),
+    sources: store.states(),
     libraryCount: groupInventory(store.inventory(), store.libraryGroups()).filter((g) =>
       g.copies.some((i) => i.available),
     ).length,
@@ -382,10 +385,7 @@ export async function buildApp(
     if (!item || config.demo) return reply.code(404).send();
     let upstream: Response;
     try {
-      upstream =
-        item.source === 'bookorbit'
-          ? await services.bookorbit.cover(item)
-          : await services.chaptarr.cover(item);
+      upstream = await services.cover(item);
     } catch {
       return reply.code(404).send();
     }
@@ -414,7 +414,7 @@ export async function buildApp(
   app.post('/api/sync', { schema: body({}) }, async (req) => {
     admin(req);
     await services.syncAll();
-    return { sources: [store.state('bookorbit'), store.state('chaptarr')] };
+    return { sources: store.states() };
   });
   app.post<{ Body: { catalogId: string; mediaKind: MediaKind; itemIds: string[] } }>(
     '/api/matches',
@@ -620,6 +620,13 @@ export async function buildApp(
     return {
       connections: {
         ...c,
+        libraryServers: c.libraryServers.map((server) => ({
+          ...server,
+          password: '',
+          apiKey: '',
+          passwordSet: Boolean(server.password),
+          apiKeySet: Boolean(server.apiKey),
+        })),
         bookorbitPassword: '',
         chaptarrApiKey: '',
         bookorbitPasswordSet: Boolean(c.bookorbitPassword),
@@ -633,11 +640,41 @@ export async function buildApp(
     };
   });
   const connectionProperties: Record<keyof ConnectionConfig, unknown> = {
+    libraryServers: {
+      type: 'array',
+      maxItems: 20,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'id',
+          'provider',
+          'name',
+          'url',
+          'publicUrl',
+          'username',
+          'password',
+          'apiKey',
+          'libraryIds',
+        ],
+        properties: {
+          id: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$' },
+          provider: { type: 'string', enum: Object.keys(libraryProviders) },
+          name: { ...text(80), minLength: 1 },
+          url: text(500),
+          publicUrl: text(500),
+          username: text(100),
+          password: text(1000),
+          apiKey: text(2000),
+          libraryIds: text(2000),
+        },
+      },
+    },
     bookorbitUrl: text(500),
     bookorbitPublicUrl: text(500),
     bookorbitUsername: text(100),
     bookorbitPassword: text(1000),
-    bookorbitLibraryIds: text(200),
+    bookorbitLibraryIds: text(2000),
     chaptarrUrl: text(500),
     chaptarrPublicUrl: text(500),
     chaptarrApiKey: text(1000),
@@ -650,6 +687,7 @@ export async function buildApp(
   };
   function connectionInput(value: ConnectionConfig) {
     const input = { ...value };
+    const previous = services.connections;
     try {
       for (const key of [
         'bookorbitUrl',
@@ -658,7 +696,64 @@ export async function buildApp(
         'chaptarrPublicUrl',
       ] as const)
         input[key] = validateServiceUrl(input[key]);
-    } catch {
+      const servers = value.libraryServers ?? [
+        ...normalizeConnections({ ...input, libraryServers: undefined }).libraryServers,
+        ...previous.libraryServers.filter((server) => server.id !== 'bookorbit'),
+      ];
+      if (servers.length > 20) throw new AppError(400, 'You can connect up to 20 library servers.');
+      if (new Set(servers.map((server) => server.id)).size !== servers.length)
+        throw new AppError(400, 'Each library server must have a different connection ID.');
+      input.libraryServers = servers.map((server): LibraryServerConfig => {
+        const saved = previous.libraryServers.find((entry) => entry.id === server.id);
+        if (
+          (server.id === 'bookorbit' && server.provider !== 'bookorbit') ||
+          (saved && saved.provider !== server.provider)
+        )
+          throw new AppError(
+            400,
+            'To change a server type, remove the connection and add a new one.',
+          );
+        const url = validateServiceUrl(server.url);
+        const publicUrl = validateServiceUrl(server.publicUrl);
+        const name = server.name.trim();
+        if (!name) throw new AppError(400, 'Give each library server a name.');
+        const libraryIds = server.libraryIds
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean)
+          .join(',');
+        const pattern =
+          server.provider === 'audiobookshelf'
+            ? /^[A-Za-z0-9_-]+(,[A-Za-z0-9_-]+)*$/
+            : /^\d+(,\d+)*$/;
+        if (libraryIds && !pattern.test(libraryIds))
+          throw new AppError(
+            400,
+            'Library IDs must be comma-separated IDs from the selected server.',
+          );
+        // A blank credential only reuses a secret for the same server and account.
+        const sameAccount =
+          saved?.url === url &&
+          saved?.username === server.username &&
+          saved?.provider === server.provider;
+        return {
+          ...server,
+          name,
+          url,
+          publicUrl,
+          libraryIds,
+          password:
+            server.provider === 'audiobookshelf'
+              ? ''
+              : server.password || (sameAccount ? saved.password : ''),
+          apiKey:
+            server.provider === 'audiobookshelf'
+              ? server.apiKey || (sameAccount ? saved.apiKey : '')
+              : '',
+        };
+      });
+    } catch (error) {
+      if (error instanceof AppError) throw error;
       throw new AppError(
         400,
         'Use HTTP or HTTPS service URLs without embedded credentials or query strings.',
@@ -666,37 +761,49 @@ export async function buildApp(
     }
     if (input.bookorbitLibraryIds && !/^\d+(\s*,\s*\d+)*$/.test(input.bookorbitLibraryIds.trim()))
       throw new AppError(400, 'Library IDs must be comma-separated numbers.');
-    if (!input.bookorbitPassword) input.bookorbitPassword = services.connections.bookorbitPassword;
-    if (!input.chaptarrApiKey) input.chaptarrApiKey = services.connections.chaptarrApiKey;
-    return input;
+    if (!input.chaptarrApiKey && input.chaptarrUrl === previous.chaptarrUrl)
+      input.chaptarrApiKey = previous.chaptarrApiKey;
+    return normalizeConnections(input);
   }
+  const requiredConnections = Object.keys(connectionProperties).filter(
+    (key) => key !== 'libraryServers',
+  );
   app.post<{ Body: ConnectionConfig }>(
     '/api/settings/check',
     {
-      schema: body(connectionProperties, Object.keys(connectionProperties)),
+      bodyLimit: 256 * 1024,
+      schema: body(connectionProperties, requiredConnections),
       config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     },
     async (req) => {
       admin(req);
       if (config.demo) throw new AppError(409, 'Demo connections cannot be changed.');
       const input = connectionInput(req.body);
-      const bo = new BookOrbit(input);
       const ch = new Chaptarr(input);
-      const bookorbit = (async () => {
-        if (!bo.configured)
-          return { ok: false, error: 'Enter the BookOrbit URL, username, and password.' };
-        try {
-          const libraries = array(await readJson(await bo.response('/libraries')))
-            .filter((l) => l.type === 'books')
-            .map((l) => ({ id: l.id, name: l.name }));
-          return { ok: true, libraries };
-        } catch (error) {
-          return {
-            ok: false,
-            error: error instanceof Error ? error.message : 'Connection check failed.',
-          };
-        }
-      })();
+      const libraries = Promise.all(
+        input.libraryServers.map(async (server) => {
+          const adapter = libraryAdapter(server, input);
+          try {
+            if (!adapter.configured)
+              return {
+                id: server.id,
+                ok: false,
+                error: `Enter the ${libraryProviders[server.provider]} URL and required credentials.`,
+              };
+            const libraries = await adapter.libraries();
+            selectedLibraries(libraries, server.libraryIds, libraryProviders[server.provider]);
+            return { id: server.id, ok: true, libraries };
+          } catch (error) {
+            return {
+              id: server.id,
+              ok: false,
+              error: error instanceof Error ? error.message : 'Connection check failed.',
+            };
+          } finally {
+            adapter.cancel();
+          }
+        }),
+      );
       const chaptarr = (async () => {
         if (!ch.configured) return { ok: false, error: 'Enter the Chaptarr URL and API key.' };
         try {
@@ -718,22 +825,31 @@ export async function buildApp(
             ok: false,
             error: error instanceof Error ? error.message : 'Connection check failed.',
           };
+        } finally {
+          ch.cancel();
         }
       })();
-      const checked = await Promise.all([bookorbit, chaptarr]);
-      return { bookorbit: checked[0], chaptarr: checked[1] };
+      const checked = await Promise.all([libraries, chaptarr]);
+      return {
+        libraryServers: checked[0],
+        chaptarr: checked[1],
+        bookorbit: checked[0].find((server) => server.id === 'bookorbit') || {
+          ok: false,
+          error: 'BookOrbit is not connected.',
+        },
+      };
     },
   );
   app.put<{ Body: ConnectionConfig }>(
     '/api/settings',
-    { schema: body(connectionProperties, Object.keys(connectionProperties)) },
+    { bodyLimit: 256 * 1024, schema: body(connectionProperties, requiredConnections) },
     async (req) => {
       const actor = admin(req);
       if (config.demo) throw new AppError(409, 'Demo connections cannot be changed.');
       const input = connectionInput(req.body);
       services.saveConnections(input, actor);
       await services.syncAll();
-      return { ok: true, sources: [store.state('bookorbit'), store.state('chaptarr')] };
+      return { ok: true, sources: store.states() };
     },
   );
   app.get('/api/users', async (req) => {

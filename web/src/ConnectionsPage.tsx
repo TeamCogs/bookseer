@@ -1,13 +1,24 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ExternalLink, LockKeyhole, PlugZap, Save } from 'lucide-react';
-import type { AppStatus } from '../../shared/types';
+import { ExternalLink, LockKeyhole, PlugZap, Plus, Save } from 'lucide-react';
+import type { AppStatus, LibraryProvider, LibraryServerConfig } from '../../shared/types';
+import { libraryProviders, sourceName } from '../../shared/libraries';
 import type { ConnectionConfig } from '../../server/config';
 import { api, message, time } from './api';
+import {
+  LibraryServerCard,
+  type EditableLibraryServer,
+  type LibraryCheck,
+} from './LibraryServerCard';
 
-type Connections = ConnectionConfig & { bookorbitPasswordSet: boolean; chaptarrApiKeySet: boolean };
+type Connections = Omit<ConnectionConfig, 'libraryServers'> & {
+  libraryServers: EditableLibraryServer[];
+  bookorbitPasswordSet: boolean;
+  chaptarrApiKeySet: boolean;
+};
+type ScalarConnectionKey = Exclude<keyof ConnectionConfig, 'libraryServers'>;
 type Choice = { id: number; name: string; type?: string | number };
 type Checks = {
-  bookorbit: { ok: boolean; error?: string; libraries?: Choice[] };
+  libraryServers: LibraryCheck[];
   chaptarr: {
     ok: boolean;
     error?: string;
@@ -30,6 +41,7 @@ export function ConnectionsPage({
   const [checks, setChecks] = useState<Checks>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [provider, setProvider] = useState<LibraryProvider>('bookorbit');
   useEffect(() => {
     const controller = new AbortController();
     api<{ connections: Connections }>('/settings', 'GET', undefined, controller.signal)
@@ -41,7 +53,12 @@ export function ConnectionsPage({
   }, []);
   function input() {
     const { bookorbitPasswordSet: _b, chaptarrApiKeySet: _c, ...result } = value!;
-    return result;
+    return {
+      ...result,
+      libraryServers: result.libraryServers.map(
+        ({ passwordSet: _password, apiKeySet: _api, ...server }) => server,
+      ),
+    };
   }
   async function check() {
     if (!value) return;
@@ -64,33 +81,82 @@ export function ConnectionsPage({
       await api('/settings', 'PUT', input());
       refresh();
       toast('Connections saved. Check the complete sync results below.');
-      setValue({
-        ...value,
-        bookorbitPassword: '',
-        chaptarrApiKey: '',
-        bookorbitPasswordSet: Boolean(value.bookorbitPassword) || value.bookorbitPasswordSet,
-        chaptarrApiKeySet: Boolean(value.chaptarrApiKey) || value.chaptarrApiKeySet,
-      });
+      setValue((await api<{ connections: Connections }>('/settings')).connections);
     } catch (e) {
       setError(message(e));
     } finally {
       setBusy('');
     }
   }
-  function change(key: keyof ConnectionConfig, next: string | number) {
-    setValue((current) => (current ? { ...current, [key]: next } : current));
-    if (
-      [
-        'bookorbitUrl',
-        'bookorbitUsername',
-        'bookorbitPassword',
-        'chaptarrUrl',
-        'chaptarrApiKey',
-      ].includes(key)
-    )
-      setChecks(undefined);
+  function change(key: ScalarConnectionKey, next: string | number) {
+    setValue((current) =>
+      current
+        ? {
+            ...current,
+            [key]: next,
+            ...(key === 'chaptarrUrl' && next !== current.chaptarrUrl
+              ? { chaptarrApiKeySet: false }
+              : {}),
+          }
+        : current,
+    );
+    if (['chaptarrUrl', 'chaptarrApiKey'].includes(key)) setChecks(undefined);
   }
-  const field = (key: keyof ConnectionConfig, label: string, placeholder = '', secret = false) => (
+  function changeServer(id: string, key: keyof LibraryServerConfig, next: string) {
+    setValue((current) =>
+      current
+        ? {
+            ...current,
+            libraryServers: current.libraryServers.map((server) =>
+              server.id === id
+                ? {
+                    ...server,
+                    [key]: next,
+                    ...(['url', 'username'].includes(key) && next !== server[key]
+                      ? { passwordSet: false, apiKeySet: false }
+                      : {}),
+                  }
+                : server,
+            ),
+          }
+        : current,
+    );
+    if (['url', 'username', 'password', 'apiKey'].includes(key))
+      setChecks((current) =>
+        current
+          ? {
+              ...current,
+              libraryServers: current.libraryServers.filter((server) => server.id !== id),
+            }
+          : current,
+      );
+  }
+  function addServer() {
+    setValue((current) => {
+      if (!current) return current;
+      const count = current.libraryServers.filter((server) => server.provider === provider).length;
+      return {
+        ...current,
+        libraryServers: [
+          ...current.libraryServers,
+          {
+            id: crypto.randomUUID(),
+            provider,
+            name: `${libraryProviders[provider]}${count ? ` ${count + 1}` : ''}`,
+            url: '',
+            publicUrl: '',
+            username: '',
+            password: '',
+            apiKey: '',
+            libraryIds: '',
+            passwordSet: false,
+            apiKeySet: false,
+          },
+        ],
+      };
+    });
+  }
+  const field = (key: ScalarConnectionKey, label: string, placeholder = '', secret = false) => (
     <label className="field">
       {label}
       <input
@@ -192,7 +258,7 @@ export function ConnectionsPage({
         {status?.sources.map((source) => (
           <div className="panel source-card" key={source.source}>
             <div className="section-title">
-              <h3>{source.source === 'bookorbit' ? 'BookOrbit' : 'Official Chaptarr'}</h3>
+              <h3>{sourceName(source)}</h3>
               <span className={`pill ${source.status === 'healthy' ? 'success' : ''}`}>
                 {source.status === 'healthy'
                   ? 'Connected'
@@ -211,78 +277,74 @@ export function ConnectionsPage({
       </div>
       {value ? (
         <form onSubmit={(e) => void save(e)}>
-          <div className="panel settings-section">
+          <section className="panel settings-section">
             <div className="section-title">
-              <h2>BookOrbit</h2>
+              <h2>Library servers</h2>
               <span className="pill success">Read-only inventory</span>
             </div>
             <p className="muted">
-              Include the libraries you already own. Bookseerr reads records and covers without
-              changing your books.
+              Connect BookOrbit, Grimmory, or Audiobookshelf. You can include several servers of
+              each type. Copies appear together under one book, with separate ebook and audiobook
+              availability.
             </p>
-            <div className="form-grid">
-              {field('bookorbitUrl', 'Internal URL', 'http://bookorbit:3000')}
-              {field('bookorbitPublicUrl', 'Reader URL', 'https://books.example.com')}
-              {field('bookorbitUsername', 'Username')}
-              {field(
-                'bookorbitPassword',
-                'Password',
-                value.bookorbitPasswordSet ? 'Saved · leave blank to keep' : 'BookOrbit password',
-                true,
-              )}
-            </div>
-            {checks?.bookorbit.libraries ? (
-              <div className="library-choices">
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={!value.bookorbitLibraryIds}
-                    onChange={(e) =>
-                      change(
-                        'bookorbitLibraryIds',
-                        e.target.checked ? '' : String(checks.bookorbit.libraries?.[0]?.id || ''),
-                      )
-                    }
-                  />
-                  Include every accessible book library
-                </label>
-                <div className="button-row">
-                  {checks.bookorbit.libraries.map((library) => (
-                    <label className="checkbox" key={library.id}>
-                      <input
-                        type="checkbox"
-                        disabled={!value.bookorbitLibraryIds}
-                        checked={
-                          !value.bookorbitLibraryIds ||
-                          value.bookorbitLibraryIds.split(',').includes(String(library.id))
-                        }
-                        onChange={(e) => {
-                          const selected = new Set(value.bookorbitLibraryIds.split(','));
-                          if (e.target.checked) selected.add(String(library.id));
-                          else selected.delete(String(library.id));
-                          if (selected.size) change('bookorbitLibraryIds', [...selected].join(','));
-                        }}
-                      />
-                      {library.name}
-                    </label>
+            <div className="button-row">
+              <label className="field">
+                Server type
+                <select
+                  value={provider}
+                  disabled={Boolean(busy) || status?.demo}
+                  onChange={(event) => setProvider(event.target.value as LibraryProvider)}
+                >
+                  {Object.entries(libraryProviders).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
                   ))}
-                </div>
-              </div>
-            ) : (
-              field(
-                'bookorbitLibraryIds',
-                'Library selection (optional IDs)',
-                'Leave blank for all; check the connection to choose by name',
-              )
-            )}
-            {checks ? (
-              <p className={`small ${checks.bookorbit.ok ? 'green-text' : 'amber-text'}`}>
-                {checks.bookorbit.ok
-                  ? 'Connection verified. Accessible libraries are shown above.'
-                  : checks.bookorbit.error}
-              </p>
-            ) : null}
-          </div>
+                </select>
+              </label>
+              <button
+                className="button"
+                type="button"
+                disabled={Boolean(busy) || status?.demo || value.libraryServers.length >= 20}
+                onClick={addServer}
+              >
+                <Plus size={16} /> Add library server
+              </button>
+              <button
+                className="button"
+                type="button"
+                disabled={Boolean(busy) || status?.demo}
+                onClick={() => void check()}
+              >
+                <PlugZap size={16} />{' '}
+                {busy === 'check' ? 'Checking connections…' : 'Check connections & load choices'}
+              </button>
+            </div>
+            <p className="small muted">
+              Bookseerr reads your inventory and covers. Removing a connection forgets its cached
+              copies; your server’s files and metadata stay in place. Changes take effect when you
+              save.
+            </p>
+          </section>
+          {value.libraryServers.map((server) => (
+            <LibraryServerCard
+              key={server.id}
+              server={server}
+              check={checks?.libraryServers.find((entry) => entry.id === server.id)}
+              disabled={Boolean(busy) || Boolean(status?.demo)}
+              change={changeServer}
+              remove={(id) =>
+                setValue((current) =>
+                  current
+                    ? {
+                        ...current,
+                        libraryServers: current.libraryServers.filter((entry) => entry.id !== id),
+                      }
+                    : current,
+                )
+              }
+            />
+          ))}
           <div className="panel settings-section">
             <div className="section-title">
               <h2>Official Chaptarr</h2>

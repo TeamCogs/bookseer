@@ -167,6 +167,18 @@ export class Store {
       )
       .run(state.source, JSON.stringify(state));
   }
+  states(): SourceState[] {
+    return (
+      this.db.prepare('SELECT payload FROM source_states ORDER BY rowid').all() as {
+        payload: string;
+      }[]
+    ).map((row) => JSON.parse(row.payload));
+  }
+  removeSource(source: Source) {
+    this.db.prepare('DELETE FROM inventory WHERE source=?').run(source);
+    this.db.prepare('DELETE FROM source_states WHERE source=?').run(source);
+    this.cachedInventory = undefined;
+  }
   replaceInventory(source: Source, items: LibraryItem[]) {
     if (
       items.some((item) => item.source !== source) ||
@@ -178,9 +190,11 @@ export class Store {
       const insert = this.db.prepare('INSERT INTO inventory VALUES(?,?,?)');
       items.forEach((item) => insert.run(item.id, source, JSON.stringify(item)));
       this.setState({
+        ...this.state(source),
         source,
         configured: true,
         status: 'healthy',
+        snapshotVerified: true,
         count: items.length,
         lastSuccess: new Date().toISOString(),
         lastAttempt: new Date().toISOString(),

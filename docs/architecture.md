@@ -1,17 +1,17 @@
 # How Bookseerr works
 
-Bookseerr is a self-hosted discovery, availability, and request portal. Official [Chaptarr](https://github.com/Chaptarr/chaptarr) manages acquisition and imports. [BookOrbit](https://github.com/bookorbit/bookorbit) supplies existing inventory and reader links. Bookseerr is an independent application, not a fork or an official part of either project.
+Bookseerr is a self-hosted discovery, availability, and request portal. Official [Chaptarr](https://github.com/Chaptarr/chaptarr) manages acquisition and imports. One or more [BookOrbit](https://github.com/bookorbit/bookorbit), [Grimmory](https://github.com/grimmory-tools/grimmory), and [Audiobookshelf](https://github.com/advplyr/audiobookshelf) servers supply existing inventory and reader links. Bookseerr is an independent application.
 
 ```mermaid
 flowchart LR
   Readers[Household readers] --> Bookseerr[Bookseerr: accounts, search, requests]
   Bookseerr --> Catalogue[Open Library metadata]
-  BookOrbit[BookOrbit inventory] --> Bookseerr
+  Libraries[BookOrbit / Grimmory / Audiobookshelf] -->|Inventory and covers| Bookseerr
   Chaptarr[Official Chaptarr inventory and queue] --> Bookseerr
   Bookseerr -->|Approved missing format| Chaptarr
   Chaptarr --> Clients[Existing indexers and download clients]
   Clients --> Files[Existing library files]
-  Files --> BookOrbit
+  Files --> Libraries
 ```
 
 ## Accounts and permissions
@@ -22,15 +22,17 @@ Public registration is closed. Users cannot change their own role, quota, approv
 
 ## Availability and matching
 
-Ebooks and audiobooks are independent. A monitored Chaptarr record is not a file. BookOrbit records marked missing are not available copies. A full recent inventory must support a negative ownership result before Bookseerr sends an acquisition request.
+Ebooks and audiobooks are independent. A monitored Chaptarr record is not a file. BookOrbit records marked missing and Audiobookshelf records marked missing or invalid are not available copies. Grimmory physical books and supplementary files are excluded; its library paths must report healthy before and after the read. A full recent inventory must support a negative ownership result before Bookseerr sends an acquisition request.
 
 Chaptarr may create an author's unmonitored catalogue during a single-book add. Bookseerr reads the complete response but excludes catalogue-only records with no files and no active monitoring. Existing files remain included even if their Chaptarr monitoring is disabled. Actively tracked books without files remain visible with unavailable format badges.
 
 Matching checks normalized title and author, validated ISBNs, and provider work identities. Filename prefixes such as `Author, First - Series 03 - Title.epub` are normalized for display and matching. Parts, volumes, and collections are kept distinct. Related or conflicting metadata requires an administrator's persistent identity decision. Confirming identity does not invent a missing file. Dismissing a possible match applies only to the reviewed item, not future copies.
 
-Each source commits its inventory as one SQLite transaction after all pages have been validated. Repeated IDs, changing totals, missing pages, inaccessible selected libraries, malformed responses, and authentication failures retain the previous snapshot. A failed or expired source cannot prove absence. Previously seen copies remain visible with unverified availability. Startup requires a fresh source check before trusting a previous snapshot.
+Each named server commits its inventory as one SQLite transaction after the whole read has been validated. Repeated IDs, changing totals, missing pages, inaccessible selected libraries, malformed responses, and authentication failures retain that server's previous snapshot. Other servers can still sync successfully. A fresh matching copy from any connected server establishes availability; a negative result requires every configured source to be fresh. A newly added connection with incomplete credentials also blocks negative results until fixed or removed. Previously seen copies remain visible with unverified availability. Startup requires a fresh source check before trusting a previous snapshot. A saved snapshot remains unverified while a startup check, changed connection, or retry after a failed read is in progress. A normal background sync can retain a still-fresh, previously verified snapshot.
 
-BookOrbit uses zero-based pages of at most 100 records. Chaptarr's general book endpoint explicitly includes authors. These details are covered by adapter contract tests; assumptions here caused real integration failures during development.
+BookOrbit and Audiobookshelf use zero-based pages of 100 records. Audiobookshelf requests full item details without series collapsing and excludes podcast libraries. Grimmory reads the complete `/api/v1/libraries/{id}/book` list for each selected library, including primary and alternate file formats; the standard 32 MiB response limit still applies. Chaptarr's general book endpoint explicitly includes authors. These details are covered by adapter contract tests.
+
+Each connection has a stable ID separate from its provider type. Source keys, copy IDs, covers, freshness, and credentials are scoped to that connection, so two servers can report the same remote book ID without overwriting each other. Library cards retain connection names and reader links. Existing `BOOKORBIT_*` or encrypted single-BookOrbit settings normalize into the reserved `bookorbit` connection without changing inventory IDs, saved groups, or reviewed matches. Saved connection arrays become authoritative. Removing a connection forgets only its local cache and health state; it does not change upstream books. A delayed response from an old configuration cannot replace a new connection's snapshot.
 
 ## Duplicate grouping
 
@@ -45,7 +47,7 @@ requested by a reader -> pending approval -> approved / waiting for setup
                      -> needs review if identity, network outcome, or import is uncertain
 ```
 
-A unique database constraint coalesces concurrent requests for the same catalogue work and medium. Approved requests are processed in the background with a visible inventory-checking state. Complete connected inventories are refreshed before acquisition, then every remote write checks availability again. The browser can leave the page while verification proceeds. Cancellation during checking prevents submission. Chaptarr lookup must resolve a unique compatible work. Existing local instances are reused. Only the requested medium is submitted, with separate destination and profile settings. New authors do not automatically monitor their entire catalogue.
+A unique database constraint coalesces concurrent requests for the same catalogue work and medium. Approved requests are processed in the background with a visible inventory-checking state. Every connected server's complete inventory is refreshed before acquisition, then every remote write checks availability again. The browser can leave the page while verification proceeds. Cancellation during checking prevents submission. Chaptarr lookup must resolve a unique compatible work. Existing local instances are reused. Only the requested medium is submitted, with separate destination and profile settings. New authors do not automatically monitor their entire catalogue.
 
 Requests made from a connected-library card and an online result with the same complete normalized title and author, or a compatible resolved work identity, join the same format request. This identity check runs inside the database transaction, before applying a new-request quota. Both views show the same request and following state. Incomplete identities, parts, volumes, and different authors remain separate. Chaptarr's validated canonical work aliases persist in Bookseerr's catalogue through later discovery refreshes so an imported edition can fulfill the original request despite a subtitle difference.
 
@@ -57,4 +59,4 @@ The production container serves the React interface and Fastify API from one ori
 
 Passwords use salted scrypt hashes. Session cookies are opaque and HTTP-only; session tokens are hashed in the database. Writes require CSRF tokens and same-origin checks. Connection credentials saved in the interface use authenticated encryption with the private installation key. Request logging omits credentials and search contents. Cover access is authenticated and bounded. Only administrators can configure upstream service URLs.
 
-Search queries go to Open Library. BookOrbit login and inventory requests go to the configured BookOrbit server. Chaptarr receives work identifiers and approved acquisition requests. Bookseerr does not run downloads or change your download clients' routing. Configure VPN isolation and import paths in the acquisition stack itself.
+Search queries go to Open Library. Inventory and authenticated cover requests go to their configured library server. Passwords and Audiobookshelf API tokens are encrypted in settings and omitted from settings readback; tokens are sent in authorization headers, never reader links. A blank credential reuses a saved secret only for the same server type, internal URL, and username. Chaptarr receives work identifiers and approved acquisition requests. Bookseerr does not run downloads or change your download clients' routing. Configure VPN isolation and import paths in the acquisition stack itself.

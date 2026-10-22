@@ -1,9 +1,22 @@
 export type MediaKind = 'ebook' | 'audiobook';
-export type Source = 'bookorbit' | 'chaptarr';
+export type LibraryProvider = 'bookorbit' | 'grimmory' | 'audiobookshelf';
+export type Source = 'bookorbit' | 'chaptarr' | `library:${string}`;
+export interface LibraryServerConfig {
+  id: string;
+  provider: LibraryProvider;
+  name: string;
+  url: string;
+  publicUrl: string;
+  username: string;
+  password: string;
+  apiKey: string;
+  libraryIds: string;
+}
 export type Identifiers = { isbn: string[]; work: string[] };
 export interface LibraryItem {
   id: string;
   source: Source;
+  sourceName?: string;
   remoteId: string;
   title: string;
   author: string;
@@ -27,9 +40,12 @@ export interface CatalogBook {
 }
 export interface SourceState {
   source: Source;
+  name?: string;
+  provider?: LibraryProvider;
   configured: boolean;
   status: 'unconfigured' | 'syncing' | 'healthy' | 'error';
   lastSuccess?: string;
+  snapshotVerified?: boolean;
   lastAttempt?: string;
   count: number;
   error?: string;

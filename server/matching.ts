@@ -199,6 +199,7 @@ export function sourceIsFresh(
 ): boolean {
   return Boolean(
     state?.configured &&
+    state.snapshotVerified !== false &&
     ['healthy', 'syncing'].includes(state.status) &&
     state.lastSuccess &&
     now - Date.parse(state.lastSuccess) < maxAgeHours * 3600000,
@@ -325,7 +326,7 @@ export function bookResult(
   inventory = store.inventory(),
   copies?: LibraryItem[],
 ): BookResult {
-  const states = [store.state('bookorbit'), store.state('chaptarr')];
+  const states = store.states();
   if (!copies && book.id.startsWith('local:'))
     copies = groupInventory(inventory, store.libraryGroups()).find((g) =>
       g.copies.some((i) => book.id === `local:${i.id}`),

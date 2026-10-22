@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { Availability, BookResult, MediaKind, User } from '../../shared/types';
 import { api, message } from './api';
+import { sourceName } from '../../shared/libraries';
 
 export function Cover({
   title,
@@ -237,8 +238,7 @@ export function BookDialog({
               {availability.items.map((item) => (
                 <div className="copy" key={item.id}>
                   <span>
-                    {item.source === 'bookorbit' ? 'BookOrbit' : 'Chaptarr'} ·{' '}
-                    {item.formats.join(', ') || kind}
+                    {sourceName(item)} · {item.formats.join(', ') || kind}
                   </span>
                   {item.url && availability.status === 'available' ? (
                     <a
@@ -291,7 +291,7 @@ export function BookDialog({
                     <div className="candidate" key={item.id}>
                       <strong>{item.title}</strong>
                       <small>
-                        {item.author} · {item.formats.join(', ')} ·{' '}
+                        {item.author} · {sourceName(item)} · {item.formats.join(', ')} ·{' '}
                         {item.available ? 'File present' : 'File missing'}
                       </small>
                       {user.role === 'admin' ? (
@@ -348,8 +348,7 @@ export function BookDialog({
               <span>
                 <strong>{item.title}</strong>
                 <small>
-                  {item.source === 'bookorbit' ? 'BookOrbit' : 'Chaptarr'} ·{' '}
-                  {item.formats.join(', ') || item.mediaKind} ·{' '}
+                  {sourceName(item)} · {item.formats.join(', ') || item.mediaKind} ·{' '}
                   {item.available ? 'Last reported present' : 'File missing'}
                 </small>
               </span>

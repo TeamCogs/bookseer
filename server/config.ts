@@ -1,6 +1,8 @@
 import { resolve } from 'node:path';
+import type { LibraryServerConfig } from '../shared/types.js';
 
 export interface ConnectionConfig {
+  libraryServers?: LibraryServerConfig[];
   bookorbitUrl: string;
   bookorbitPublicUrl: string;
   bookorbitUsername: string;

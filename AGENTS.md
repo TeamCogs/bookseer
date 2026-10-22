@@ -2,7 +2,7 @@
 
 - Docker and NAS deployments are the primary product. Avoid vendor-specific paths, credentials, or network assumptions in source, fixtures, screenshots, and documentation.
 - Integrate with official Chaptarr/chaptarr through its HTTP API. Keep upstream acquisition, import, and library-management responsibilities upstream.
-- BookOrbit integration reads inventory and covers. Do not modify book metadata or files through this integration.
+- BookOrbit, Grimmory, and Audiobookshelf integrations read inventory and covers. Do not modify book metadata or files through these integrations.
 - Availability must distinguish ebooks and audiobooks, physical files and monitored records, uncertainty and confirmed ownership, and complete and failed/stale syncs.
 - Failed or partial inventory reads must never erase previously verified inventory or present missing evidence as proof that a book is absent.
 - Ambiguous matches need a persistent, explainable user confirmation. Request dispatch must recheck availability and be idempotent.

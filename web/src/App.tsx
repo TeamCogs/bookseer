@@ -690,7 +690,7 @@ function Discover({
       ) : null}
       {status && !status.sources.some((s) => s.configured) ? (
         <div className="alert">
-          Connect BookOrbit or Chaptarr to see your books and verify ownership.
+          Connect your library servers or Chaptarr to see your books and verify ownership.
           {user.role === 'admin' ? (
             <button className="text-button" onClick={configure}>
               Set up connections

@@ -1,17 +1,25 @@
-import type { MediaKind, Source, User } from '../shared/types.js';
+import type { LibraryItem, MediaKind, Source, User } from '../shared/types.js';
 import type { Config, ConnectionConfig } from './config.js';
 import type { Store } from './store.js';
-import { BookOrbit } from './integrations/bookorbit.js';
+import { librarySource } from '../shared/libraries.js';
+import { normalizeConnections } from './library-config.js';
+import { libraryAdapter } from './integrations/libraries.js';
+import type { LibraryAdapter } from './integrations/library.js';
+import { IntegrationError } from './integrations/http.js';
 import { Chaptarr, LookupPendingError, PendingAddError } from './integrations/chaptarr.js';
 import { OpenLibrary } from './integrations/openlibrary.js';
 import { bookResult } from './matching.js';
 import { decrypt, encrypt } from './security.js';
 
 export class Services {
-  bookorbit: BookOrbit;
-  chaptarr: Chaptarr;
+  chaptarr!: Chaptarr;
   discovery: OpenLibrary;
-  connections: ConnectionConfig;
+  connections!: ReturnType<typeof normalizeConnections>;
+  private adapters = new Map<
+    Source,
+    Pick<LibraryAdapter, 'configured' | 'cancel' | 'inventory' | 'cover'>
+  >();
+  private generation = 0;
   private syncing = new Map<Source, Promise<void>>();
   private dispatching = new Set<string>();
   private submissions = new Set<Promise<void>>();
@@ -32,32 +40,15 @@ export class Services {
   private lastRequestInventoryCheck = 0;
   cancel() {
     this.stopping = true;
-    this.bookorbit.cancel();
-    this.chaptarr.cancel();
+    for (const adapter of this.adapters.values()) adapter.cancel();
   }
   constructor(
     readonly config: Config,
     readonly store: Store,
   ) {
     const saved = store.setting('connections');
-    this.connections = saved ? JSON.parse(decrypt(saved, config.secret)) : config.connections;
-    this.bookorbit = new BookOrbit(this.connections);
-    this.chaptarr = new Chaptarr(this.connections);
+    this.connect(saved ? JSON.parse(decrypt(saved, config.secret)) : config.connections);
     this.discovery = new OpenLibrary(config.contact);
-    for (const source of ['bookorbit', 'chaptarr'] as Source[]) {
-      const state = store.state(source);
-      const configured = this[source].configured;
-      store.setState({
-        ...state,
-        source,
-        configured,
-        status: configured ? (state.lastSuccess ? 'error' : 'unconfigured') : 'unconfigured',
-        error:
-          configured && state.lastSuccess
-            ? 'Waiting for a fresh connection check after startup.'
-            : undefined,
-      });
-    }
     store.db
       .prepare(
         "UPDATE requests SET status='needs_review', message='The server restarted during submission. Verify Chaptarr before retrying.', updated_at=? WHERE status='submitting'",
@@ -69,25 +60,65 @@ export class Services {
       )
       .run(new Date().toISOString());
   }
+  private connect(input: ConnectionConfig) {
+    this.connections = normalizeConnections(input);
+    this.chaptarr = new Chaptarr(this.connections);
+    this.adapters = new Map([['chaptarr', this.chaptarr]]);
+    for (const server of this.connections.libraryServers)
+      this.adapters.set(librarySource(server), libraryAdapter(server, this.connections));
+    for (const state of this.store.states()) {
+      if (!this.adapters.has(state.source))
+        this.store.setState({
+          ...state,
+          configured: false,
+          status: 'unconfigured',
+          error: undefined,
+        });
+    }
+    for (const [source, adapter] of this.adapters) {
+      const state = this.store.state(source);
+      const server = this.connections.libraryServers.find(
+        (server) => librarySource(server) === source,
+      );
+      const configured = Boolean(server) || adapter.configured;
+      this.store.setState({
+        ...state,
+        source,
+        name: server?.name || 'Chaptarr',
+        provider: server?.provider,
+        configured,
+        snapshotVerified: false,
+        status: configured && state.lastSuccess ? 'error' : 'unconfigured',
+        error:
+          configured && state.lastSuccess ? 'Waiting for a fresh connection check.' : undefined,
+      });
+    }
+  }
+  async cover(item: LibraryItem): Promise<Response> {
+    const adapter = this.adapters.get(item.source);
+    if (!adapter?.configured) throw new IntegrationError('This library server is not connected.');
+    return adapter.cover(item);
+  }
   saveConnections(input: ConnectionConfig, actor: User) {
     if (this.stopping) throw new Error('The server is shutting down.');
     const previous = this.connections;
-    this.store.setSetting('connections', encrypt(JSON.stringify(input), this.config.secret));
-    this.bookorbit.cancel();
-    this.chaptarr.cancel();
+    const next = normalizeConnections(input);
+    const retained = new Set(next.libraryServers.map(librarySource));
+    this.store.transaction(() => {
+      this.store.setSetting('connections', encrypt(JSON.stringify(next), this.config.secret));
+      for (const state of this.store.states())
+        if (state.source !== 'chaptarr' && !retained.has(state.source))
+          this.store.removeSource(state.source);
+    });
+    for (const adapter of this.adapters.values()) adapter.cancel();
+    this.generation++;
     this.syncing.clear();
-    this.connections = input;
-    this.bookorbit = new BookOrbit(input);
-    this.chaptarr = new Chaptarr(input);
-    for (const source of ['bookorbit', 'chaptarr'] as Source[]) {
-      this.store.setState({
-        ...this.store.state(source),
-        configured: this[source].configured,
-        status: 'unconfigured',
-        error: undefined,
-        lastSuccess: undefined,
-      });
-    }
+    this.connect(next);
+    this.store.db
+      .prepare(
+        "UPDATE requests SET status='pending_setup',message='Connections changed. Waiting to recheck libraries.',updated_at=? WHERE status='checking'",
+      )
+      .run(new Date().toISOString());
     this.store.audit(
       actor.id,
       'connections.updated',
@@ -98,23 +129,29 @@ export class Services {
   async sync(source: Source): Promise<void> {
     if (this.stopping) return;
     if (this.syncing.has(source)) return this.syncing.get(source)!;
-    const adapter = this[source];
-    if (!adapter.configured || this.config.demo) return;
+    const adapter = this.adapters.get(source);
+    if (!adapter || this.config.demo || !this.store.state(source).configured) return;
     const task = (async () => {
+      const previous = this.store.state(source);
       this.store.setState({
-        ...this.store.state(source),
+        ...previous,
         configured: true,
         status: 'syncing',
+        snapshotVerified: previous.status === 'healthy' && previous.snapshotVerified !== false,
         lastAttempt: new Date().toISOString(),
         error: undefined,
       });
       try {
+        if (!adapter.configured)
+          throw new IntegrationError(
+            'Enter the server URL and required credentials, then save and sync.',
+          );
         const items = await adapter.inventory();
         // Do not commit an old connection's in-flight snapshot after settings change.
-        if (adapter !== this[source]) return;
+        if (adapter !== this.adapters.get(source)) return;
         this.store.replaceInventory(source, items);
       } catch (error) {
-        if (adapter !== this[source]) return;
+        if (adapter !== this.adapters.get(source)) return;
         this.store.setState({
           ...this.store.state(source),
           configured: true,
@@ -130,8 +167,11 @@ export class Services {
       if (this.syncing.get(source) === task) this.syncing.delete(source);
     }
   }
+  private async syncInventories() {
+    await Promise.allSettled([...this.adapters.keys()].map((source) => this.sync(source)));
+  }
   async syncAll() {
-    await Promise.allSettled([this.sync('bookorbit'), this.sync('chaptarr')]);
+    await this.syncInventories();
     await this.refreshRequests();
   }
   async dispatch(id: string): Promise<void> {
@@ -201,10 +241,16 @@ export class Services {
       )
       .run(new Date().toISOString(), id);
     if (!reserved.changes) return;
+    const generation = this.generation;
     this.dispatching.add(id);
     try {
       const resolved = await this.chaptarr.lookup(book, kind);
-      if (this.stopping || this.store.request(id)?.status !== 'checking') return;
+      if (
+        this.stopping ||
+        generation !== this.generation ||
+        this.store.request(id)?.status !== 'checking'
+      )
+        return;
       if (
         typeof resolved.foreignBookId === 'string' &&
         /^(ol:|hc:|gr:|gb:)/.test(resolved.foreignBookId)
@@ -224,8 +270,13 @@ export class Services {
         throw new LookupPendingError(
           'Waiting for the accepted Chaptarr addition to create its local instance.',
         );
-      await Promise.all([this.sync('bookorbit'), this.sync('chaptarr')]);
-      if (this.stopping || this.store.request(id)?.status !== 'checking') return;
+      await this.syncInventories();
+      if (
+        this.stopping ||
+        generation !== this.generation ||
+        this.store.request(id)?.status !== 'checking'
+      )
+        return;
       const checked = bookResult(book, this.store, this.config.inventoryMaxAgeHours).availability[
         kind
       ];
@@ -260,6 +311,10 @@ export class Services {
         kind,
         () => {
           if (this.stopping) throw new Error('Submission interrupted by server shutdown.');
+          if (generation !== this.generation)
+            throw new Error(
+              'Connections changed during submission. Review Chaptarr before retrying.',
+            );
           const current = bookResult(book, this.store, this.config.inventoryMaxAgeHours)
             .availability[kind];
           if (current.status !== 'not_found')

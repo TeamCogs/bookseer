@@ -1,8 +1,9 @@
-import type { LibraryItem, MediaKind } from '../../shared/types.js';
+import type { LibraryItem, MediaKind, Source } from '../../shared/types.js';
 import type { ConnectionConfig } from '../config.js';
 import { digest } from '../security.js';
 import { identifiers } from '../matching.js';
 import { array, IntegrationError, object, readJson, upstream } from './http.js';
+import { selectedLibraries, type LibraryAdapter, type LibraryChoice } from './library.js';
 
 const audio = new Set(['m4b', 'mp3', 'm4a', 'opus', 'ogg', 'flac']);
 const ebook = new Set([
@@ -18,7 +19,7 @@ const ebook = new Set([
   'cbr',
   'cb7',
 ]);
-export class BookOrbit {
+export class BookOrbit implements LibraryAdapter {
   private controller = new AbortController();
   cancel() {
     this.controller.abort();
@@ -26,10 +27,26 @@ export class BookOrbit {
   private accessToken?: string;
   private tokenExpires = 0;
   readonly fingerprint: string;
-  constructor(readonly config: ConnectionConfig) {
+  constructor(
+    readonly config: ConnectionConfig,
+    readonly source: Source = 'bookorbit',
+    readonly name = 'BookOrbit',
+  ) {
     this.fingerprint = digest(
       `${config.bookorbitUrl}|${config.bookorbitUsername}|${config.bookorbitLibraryIds}`,
     ).slice(0, 12);
+  }
+  async libraries(): Promise<LibraryChoice[]> {
+    return array(await readJson(await this.response('/libraries')))
+      .filter((library) => library.type === 'books')
+      .map((library) => {
+        if (!Number.isSafeInteger(library.id) || library.id <= 0)
+          throw new IntegrationError('BookOrbit returned an invalid library ID.');
+        return {
+          id: String(library.id),
+          name: typeof library.name === 'string' ? library.name : String(library.id),
+        };
+      });
   }
   get configured() {
     return Boolean(
@@ -66,20 +83,11 @@ export class BookOrbit {
     });
   }
   async inventory(): Promise<LibraryItem[]> {
-    const allLibraries = array(await readJson(await this.response('/libraries'))).filter(
-      (l) => l.type === 'books',
+    const libraries = selectedLibraries(
+      await this.libraries(),
+      this.config.bookorbitLibraryIds,
+      'BookOrbit',
     );
-    const requested = this.config.bookorbitLibraryIds
-      .split(',')
-      .map((v) => v.trim())
-      .filter(Boolean);
-    if (requested.some((id) => !allLibraries.some((l) => String(l.id) === id)))
-      throw new IntegrationError('A configured BookOrbit library is missing or inaccessible.');
-    const libraries = allLibraries.filter(
-      (l) => !requested.length || requested.includes(String(l.id)),
-    );
-    if (!libraries.length)
-      throw new IntegrationError('No accessible book libraries were returned by BookOrbit.');
     const result: LibraryItem[] = [];
     for (const library of libraries) {
       const seen = new Set<string>();
@@ -148,11 +156,12 @@ export class BookOrbit {
         ),
       ];
       if (!formats.length) return [];
-      const id = `bookorbit:${this.fingerprint}:${record.id}:${kind}`;
+      const id = `${this.source}:${this.fingerprint}:${record.id}:${kind}`;
       return [
         {
           id,
-          source: 'bookorbit' as const,
+          source: this.source,
+          sourceName: this.name,
           remoteId: String(record.id),
           title: record.title,
           author: authors.join('; '),
@@ -168,7 +177,7 @@ export class BookOrbit {
     });
   }
   async cover(item: LibraryItem): Promise<Response> {
-    if (!item.id.startsWith(`bookorbit:${this.fingerprint}:`))
+    if (item.source !== this.source || !item.id.startsWith(`${this.source}:${this.fingerprint}:`))
       throw new IntegrationError(
         'The cover belongs to a previous connection. Sync the new connection first.',
       );
