@@ -101,6 +101,16 @@ export function BookGrid({
             </div>
             <h3>{result.book.title}</h3>
             <p>{result.book.author || 'Unknown author'}</p>
+            {result.book.year || result.book.rating ? (
+              <p className="book-metadata">
+                {result.book.year ? <span>{result.book.year}</span> : null}
+                {result.book.rating ? (
+                  <span title={`${result.book.ratingCount || 0} Open Library ratings`}>
+                    ★ {result.book.rating.toFixed(1)}
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
           </div>
         </button>
       ))}

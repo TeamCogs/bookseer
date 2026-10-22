@@ -36,6 +36,11 @@ try {
     origin: 'openlibrary',
   };
   services.discovery.search = async () => [discovery];
+  services.discovery.browse = async () => ({
+    books: [discovery],
+    hasMore: false,
+    source: { name: 'Open Library', url: 'https://openlibrary.org/trending/weekly' },
+  });
   services.enqueue = () => {};
   const login = await app.inject({
     method: 'POST',
@@ -64,6 +69,7 @@ try {
     JSON.stringify({
       session,
       search,
+      discovery: await read('/api/discover'),
       library: await read('/api/library'),
       status: await read('/api/status'),
       requests: await read('/api/requests'),

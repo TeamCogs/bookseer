@@ -37,6 +37,10 @@ export interface CatalogBook {
   coverUrl?: string;
   identifiers: Identifiers;
   origin: 'openlibrary' | Source | 'demo';
+  subjects?: string[];
+  languages?: string[];
+  rating?: number;
+  ratingCount?: number;
 }
 export interface SourceState {
   source: Source;

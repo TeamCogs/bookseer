@@ -241,6 +241,12 @@ final class ClientTests: XCTestCase, @unchecked Sendable {
         XCTAssertFalse(session.demo)
         let search = try decode(SearchResponse.self, "search")
         XCTAssertEqual(search.discovery.first?.book.title, "Persuasion")
+        let discovery = try decode(DiscoveryResponse.self, "discovery")
+        XCTAssertEqual(discovery.items.first?.book.title, "Persuasion")
+        XCTAssertEqual(discovery.mode, "live")
+        XCTAssertEqual(discovery.page, 1)
+        XCTAssertEqual(discovery.pageSize, 24)
+        XCTAssertTrue(discovery.filters.topics.contains { $0.id == "fantasy" })
         let library = try decode(LibraryResponse.self, "library")
         XCTAssertEqual(library.items.first?.availability.ebook.status, .available)
         XCTAssertEqual(try decode(AppStatus.self, "status").libraryCount, 1)
@@ -251,5 +257,34 @@ final class ClientTests: XCTestCase, @unchecked Sendable {
         struct NotificationList: Decodable { let items: [ReaderNotification] }
         XCTAssertEqual(try decode(RequestList.self, "requests").items.first?.id, requested.request.id)
         _ = try decode(NotificationList.self, "notifications")
+    }
+
+    func testDiscoveryEncodesFiltersAndPagingAsAuthenticatedRead() async throws {
+        let data = try JSONEncoder().encode(await DemoService().discover())
+        let transport = StubTransport([Stub(), Stub(path: "/api/discover", body: data)])
+        let client = try APIClient(profile: profile, credential: SessionCredential(value: "sample-cookie"), transport: transport)
+        let result = try await client.discover(query: DiscoveryQuery(q: "space & time", topic: "science_fiction", sort: "rating", language: "eng", era: "recent", page: 2))
+        XCTAssertEqual(result.mode, "demo")
+        let requests = await transport.recorded
+        let request = try XCTUnwrap(requests.last)
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "bookseerr_session=sample-cookie")
+        let items = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?.queryItems)
+        let query = Dictionary(items.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
+        XCTAssertEqual(query, ["q": "space & time", "topic": "science_fiction", "sort": "rating", "language": "eng", "era": "recent", "page": "2"])
+    }
+
+    func testSampleDiscoveryUsesSeparateCatalogueAndAppliesTopicKeywordsAndLanguage() async throws {
+        let demo = DemoService()
+        let initial = await demo.discover()
+        XCTAssertFalse(initial.items.isEmpty)
+        XCTAssertTrue(initial.items.allSatisfy { $0.availability.ebook.status != .available })
+        let horror = await demo.discover(query: DiscoveryQuery(q: "Dracula", topic: "horror", language: "eng", era: "classics"))
+        XCTAssertEqual(horror.items.map(\.book.title), ["Dracula"])
+        let unmatched = await demo.discover(query: DiscoveryQuery(language: "spa"))
+        XCTAssertTrue(unmatched.items.isEmpty)
+        let secondPage = await demo.discover(query: DiscoveryQuery(page: 2))
+        XCTAssertTrue(secondPage.items.isEmpty)
+        XCTAssertFalse(secondPage.hasMore)
     }
 }

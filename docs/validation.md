@@ -1,5 +1,15 @@
 # Live verification record
 
+## External discovery, 2026-10-22
+
+The new Discover flow passed type checking, 70 backend tests, a production build, and formatting checks. All 17 native client tests passed, including decoding an actual isolated backend discovery response and preserving filter/query parameters on authenticated reads. The iOS simulator build and launch succeeded. Native UI checks used the built-in sample catalogue: topic selection, keyword refinement, and direct search for an owned title with separate ebook/audio badges.
+
+A production web build was checked locally against live Open Library reads and a synthetic, in-memory inventory, with no acquisition service configured. The default feed returned 24 external titles; page two returned 24 different-page results. Combined fantasy, rating, English-edition, first-publication-before-1970, and keyword filters returned titles meeting the provider's year/language/rating fields. Direct library search remained independent and retained ownership indicators. The inventory count was unchanged by browsing. Browser checks covered live trending display, topic selection, combined filters, direct search, and returning from search to discovery.
+
+Automated outage tests preserve previously fetched discovery lists with a warning, expire them after 24 hours, and leave the feed empty when no usable list exists; local search remains available. Demo mode never contacts public discovery. The separate review-server draft is excluded from this release. Existing request tests, plus a discovery-specific request check, cover saved catalogue identities and owned-format rejection.
+
+This verifies local application behavior and current public-provider compatibility. This revision has not been deployed to a NAS, published as a container, or distributed through TestFlight. No new live download/import test was performed for this discovery change.
+
 ## Multiple library servers, 2026-10-21
 
 The BookOrbit, Grimmory, and Audiobookshelf connectors support multiple named connections, including several servers of the same type. Type checking, all 61 automated tests, the production build, and repository formatting checks passed. The new HTTP contracts were checked against the upstream [Grimmory controllers and DTOs](https://github.com/grimmory-tools/grimmory/tree/b71c973832136abdd7612ed7c72e92760f5df5a0/backend/src/main/java/org/booklore) and [Audiobookshelf controllers and models](https://github.com/advplyr/audiobookshelf/tree/743d9152208507a1dbf7c95c94290071338f44bd/server). Audiobookshelf's older API documentation identifies itself as unmaintained, so the current server source was also inspected.

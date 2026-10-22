@@ -114,6 +114,10 @@ struct BookCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(result.book.title).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.text).lineLimit(2)
                     Text(result.book.author.isEmpty ? "Unknown author" : result.book.author).font(.caption).foregroundStyle(Theme.muted).lineLimit(2)
+                    HStack(spacing: 10) {
+                        if let year = result.book.year { Text(String(year)) }
+                        if let rating = result.book.rating { Text("★ \(rating, specifier: "%.1f")").accessibilityLabel("\(rating, specifier: "%.1f") stars on Open Library") }
+                    }.font(.caption2).foregroundStyle(Theme.gold)
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
         }.buttonStyle(.plain)

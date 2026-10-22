@@ -19,6 +19,13 @@ import { normalizeConnections } from './library-config.js';
 import { libraryProviders } from '../shared/libraries.js';
 import { Store } from './store.js';
 import { Services } from './services.js';
+import {
+  browseCatalogue,
+  discoveryFilters,
+  discoveryPageSize,
+  type CatalogPage,
+  type DiscoveryQuery,
+} from '../shared/discovery.js';
 import { libraryAdapter } from './integrations/libraries.js';
 import { selectedLibraries } from './integrations/library.js';
 import { Chaptarr } from './integrations/chaptarr.js';
@@ -235,6 +242,63 @@ export async function buildApp(
     }
     return value;
   };
+  app.get<{ Querystring: DiscoveryQuery }>(
+    '/api/discover',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            q: text(200),
+            topic: { type: 'string', enum: discoveryFilters.topics.map((f) => f.id) },
+            sort: { type: 'string', enum: discoveryFilters.sorts.map((f) => f.id) },
+            language: { type: 'string', enum: discoveryFilters.languages.map((f) => f.id) },
+            era: { type: 'string', enum: discoveryFilters.eras.map((f) => f.id) },
+            page: { type: 'integer', minimum: 1, maximum: 100 },
+          },
+        },
+      },
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    },
+    async (req) => {
+      const query = req.query;
+      const mode = config.demo ? 'demo' : 'live';
+      let page: CatalogPage;
+      if (config.demo) {
+        const books = (
+          store.db.prepare('SELECT payload FROM catalogue WHERE id NOT LIKE ?').all('local:%') as {
+            payload: string;
+          }[]
+        ).map((r) => JSON.parse(r.payload) as CatalogBook);
+        page = browseCatalogue(books, query);
+        page.source = { name: 'Sample discovery catalogue' };
+      } else {
+        try {
+          page = await services.discovery.browse(query);
+        } catch {
+          page = {
+            books: [],
+            hasMore: false,
+            source: { name: 'Open Library', url: 'https://openlibrary.org' },
+            warning:
+              'Book discovery is temporarily unavailable. Try again shortly, or use direct search to find a title in your library.',
+          };
+        }
+      }
+      const inventory = store.inventory();
+      page.books.forEach((book) => store.saveBook(book));
+      const { books, ...details } = page;
+      return {
+        ...details,
+        items: books.map((book) => result(book, inventory, req.auth!.user)),
+        page: query.page || 1,
+        pageSize: discoveryPageSize,
+        mode,
+        filters: discoveryFilters,
+      };
+    },
+  );
   app.get<{ Querystring: { q?: string; scope?: 'all' | 'local' | 'online' } }>(
     '/api/search',
     {
