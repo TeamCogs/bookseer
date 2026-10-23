@@ -1,15 +1,34 @@
-import type { CatalogBook, LibraryItem, MediaKind } from '../../shared/types.js';
+import type {
+  CatalogBook,
+  ChaptarrMatchCandidate,
+  LibraryItem,
+  MediaKind,
+} from '../../shared/types.js';
 import type { ConnectionConfig } from '../config.js';
 import { digest } from '../security.js';
-import {
-  compatibleAuthorNames,
-  compatibleExtent,
-  identifiers,
-  normalizeAuthor,
-  normalizeText,
-} from '../matching.js';
+import { identifiers } from '../matching.js';
 import { array, IntegrationError, object, readJson, upstream } from './http.js';
+import { rankChaptarrMatches, uniqueChaptarrMatch, type MatchInput } from './chaptarr-matching.js';
 export class LookupPendingError extends IntegrationError {}
+export class MatchReviewError extends IntegrationError {
+  constructor(readonly candidates: ChaptarrMatchCandidate[]) {
+    super(
+      'Chaptarr did not resolve a unique matching work. Review and save the correct book match before retrying.',
+    );
+  }
+}
+export function queueReviewMessage(item: Record<string, any>): string {
+  const details = (Array.isArray(item.statusMessages) ? item.statusMessages : [])
+    .flatMap((entry: any) => (Array.isArray(entry.messages) ? entry.messages : []))
+    .filter((message: unknown): message is string => typeof message === 'string')
+    .join(' ')
+    .slice(0, 1000);
+  const prefix =
+    item.trackedDownloadState === 'importBlocked'
+      ? 'Download complete; Chaptarr blocked the library import.'
+      : 'Chaptarr reported a download or import issue.';
+  return `${prefix}${details ? ' ' + details : ' Review its queue.'} The existing download will not be requested again.`;
+}
 export class PendingAddError extends IntegrationError {
   constructor(readonly pendingId: number) {
     super('Chaptarr accepted the addition for background processing.');
@@ -149,114 +168,96 @@ export class Chaptarr {
       headers: { 'X-Api-Key': this.config.chaptarrApiKey },
     });
   }
-  async lookup(book: CatalogBook, kind: MediaKind): Promise<Record<string, any>> {
+  async candidates(
+    book: CatalogBook,
+    kind: MediaKind,
+    confirmedWorkId?: string,
+    includeAlternatives = false,
+  ) {
     if (!this.ready(kind))
       throw new IntegrationError(
         'Set Chaptarr root folders and profile IDs before enabling acquisition.',
       );
     const lookupTerm =
+      confirmedWorkId ||
+      (/^(ol:|hc:|gr:|gb:)/.test(book.id) ? book.id : undefined) ||
       book.identifiers.work.find((id) => /^(ol:|hc:|gr:|gb:)/.test(id)) ||
       `${book.title} ${book.author}`;
-    let found = array(
+    const found = array(
       await this.json(`/book/lookup?term=${encodeURIComponent(lookupTerm)}&mediaType=${kind}`),
     );
-    // Canonical lookup can resolve a Goodreads/Open Library alias to a Hardcover ID
-    // without echoing the requested alias in the resource. The lookup itself is
-    // identity evidence; the author, extent, and unique-result checks still apply.
-    let canonicalIdentity = found.length > 0 && /^(ol:|hc:|gr:|gb:)/.test(lookupTerm);
-    if (!found.length) {
-      let searched = false;
-      for (const provider of ['goodreads', 'hardcover']) {
-        let search: Record<string, any>[];
-        try {
-          search = array(
-            await this.json(`/search?term=${encodeURIComponent(book.title)}&provider=${provider}`),
-          );
-          searched = true;
-        } catch {
-          continue;
+    const inputs: MatchInput[] = found
+      .filter((candidate) => !candidate.mediaType || candidate.mediaType === kind)
+      .map((candidate) => ({ book: candidate, canonical: /^(ol:|hc:|gr:|gb:)/.test(lookupTerm) }));
+    let ranked = rankChaptarrMatches(book, kind, inputs, confirmedWorkId);
+    const direct = uniqueChaptarrMatch(ranked, confirmedWorkId);
+    if (direct && direct.summary.score >= 800 && !includeAlternatives) return ranked;
+    let searched = false;
+    for (const provider of ['goodreads', 'hardcover']) {
+      try {
+        const results = array(
+          await this.json(`/search?term=${encodeURIComponent(book.title)}&provider=${provider}`),
+        );
+        searched = true;
+        for (const result of results) {
+          const candidate = result.book;
+          if (
+            candidate &&
+            /^(hc|ol|gr):/.test(candidate.foreignBookId || '') &&
+            /^(hc|ol|gr):/.test(candidate.author?.foreignAuthorId || '')
+          )
+            inputs.push({ book: candidate });
         }
-        const previews = search
-          .map((r) => r.book)
-          .filter(
-            (candidate: any) =>
-              candidate &&
-              normalizeText(candidate.title || '') === normalizeText(book.title) &&
-              normalizeAuthor(candidate.author?.authorName || '') ===
-                normalizeAuthor(book.author) &&
-              /^(hc|ol|gr):/.test(candidate.foreignBookId || '') &&
-              /^(hc|ol|gr):/.test(candidate.author?.foreignAuthorId || ''),
-          );
-        const ids = [...new Set<string>(previews.map((candidate: any) => candidate.foreignBookId))];
-        if (ids.length > 1)
-          throw new IntegrationError(
-            'Chaptarr search returned multiple matching works. Review the identity in Chaptarr before requesting it.',
-          );
-        if (ids.length !== 1) continue;
-        const resolved = array(
-          await this.json(`/book/lookup?term=${encodeURIComponent(ids[0])}&mediaType=${kind}`),
-        );
-        // Native search returns a provider-owned work and author identity. Chaptarr's add
-        // pipeline can accept that preview and prepare full metadata asynchronously.
-        // Its legacy text lookup filters ebook previews out before mapping the response.
-        found = resolved.length
-          ? resolved
-          : [previews.find((candidate: any) => candidate.foreignBookId === ids[0])!];
-        canonicalIdentity = resolved.length > 0;
-        break;
+      } catch {
+        /* One optional provider may be unavailable; retain evidence from the others. */
       }
-      if (!searched)
-        throw new IntegrationError(
-          'Chaptarr native search providers could not be reached. Check its provider settings and network, then retry.',
-        );
     }
-    if (!found.length)
-      throw new LookupPendingError('Chaptarr metadata is not ready for this work yet.');
-    const matches = found.filter((candidate) => {
-      const sameTitle = normalizeText(candidate.title || '') === normalizeText(book.title);
-      const candidateWork = identifiers(
-        [],
-        [
-          candidate.foreignBookId,
-          candidate.openLibraryWorkId
-            ? String(candidate.openLibraryWorkId).startsWith('ol:')
-              ? candidate.openLibraryWorkId
-              : `ol:${candidate.openLibraryWorkId}`
-            : null,
-          candidate.hardcoverBookId
-            ? String(candidate.hardcoverBookId).startsWith('hc:')
-              ? candidate.hardcoverBookId
-              : `hc:${candidate.hardcoverBookId}`
-            : null,
-          candidate.goodreadsWorkId
-            ? String(candidate.goodreadsWorkId).startsWith('gr:')
-              ? candidate.goodreadsWorkId
-              : `gr:${candidate.goodreadsWorkId}`
-            : null,
-        ],
-      ).work;
-      const sameWork =
-        canonicalIdentity || candidateWork.some((id) => book.identifiers.work.includes(id));
-      const candidateAuthor = normalizeAuthor(
-        candidate.author?.authorName || candidate.author?.name || '',
-      );
-      const requestedAuthor = normalizeAuthor(book.author);
-      const sameAuthor =
-        candidateAuthor === requestedAuthor ||
-        (sameWork && compatibleAuthorNames(candidateAuthor, requestedAuthor));
-      return (
-        (sameTitle || (sameWork && compatibleExtent(book.title, candidate.title || ''))) &&
-        Boolean(normalizeText(book.title)) &&
-        Boolean(normalizeAuthor(book.author)) &&
-        sameAuthor
-      );
-    });
-    if (matches.length !== 1)
+    ranked = rankChaptarrMatches(book, kind, inputs, confirmedWorkId);
+    if (found.length && !ranked.length) throw new MatchReviewError([]);
+    if (!searched && !inputs.length)
       throw new IntegrationError(
-        'Chaptarr did not resolve a unique matching work. Review the book in Chaptarr before requesting it.',
+        'Chaptarr native search providers could not be reached. Check its provider settings and network, then retry.',
       );
-    const candidate = matches[0];
-    return candidate;
+    return ranked;
+  }
+  async lookup(
+    book: CatalogBook,
+    kind: MediaKind,
+    confirmedWorkId?: string,
+  ): Promise<Record<string, any>> {
+    const ranked = await this.candidates(book, kind, confirmedWorkId);
+    const selected = uniqueChaptarrMatch(ranked, confirmedWorkId);
+    if (!selected) {
+      if (!ranked.length && !confirmedWorkId)
+        throw new LookupPendingError('Chaptarr metadata is not ready for this work yet.');
+      throw new MatchReviewError(ranked.map((m) => m.summary));
+    }
+    let candidate = selected.book;
+    // Search previews may use an audiobook placeholder. Hydrate the chosen identity for this format.
+    if (
+      candidate.foreignBookId &&
+      !ranked.some((m) => m === selected && m.summary.reason.includes('validated work lookup'))
+    ) {
+      const resolved = array(
+        await this.json(
+          `/book/lookup?term=${encodeURIComponent(candidate.foreignBookId)}&mediaType=${kind}`,
+        ),
+      );
+      const hydrated = uniqueChaptarrMatch(
+        rankChaptarrMatches(
+          book,
+          kind,
+          resolved
+            .filter((b) => !b.mediaType || b.mediaType === kind)
+            .map((b) => ({ book: b, canonical: true })),
+          candidate.foreignBookId,
+        ),
+        candidate.foreignBookId,
+      );
+      if (resolved.length && !hydrated) throw new MatchReviewError(ranked.map((m) => m.summary));
+      if (hydrated) candidate = hydrated.book;
+    }
+    return { ...candidate, bookseerrMatch: selected.summary };
   }
   async submit(
     book: CatalogBook,
@@ -274,6 +275,19 @@ export class Chaptarr {
     beforeWrite();
     if (existing?.hasFiles) return { id: existing.id, available: true };
     let id = existing?.id;
+    if (id) {
+      const queued = (await this.queue()).find(
+        (item) => item.bookId === id || item.book?.id === id,
+      );
+      if (queued) {
+        if (
+          queued.trackedDownloadState === 'importBlocked' ||
+          ['error', 'warning'].includes(queued.trackedDownloadStatus)
+        )
+          throw new IntegrationError(queueReviewMessage(queued));
+        return { id, available: false };
+      }
+    }
     if (existing && !existing.monitored) {
       const stored = object(await this.json(`/book/${id}`));
       if (stored.mediaType !== kind || stored.id !== id)
@@ -294,8 +308,9 @@ export class Chaptarr {
           'The accepted Chaptarr addition has not created a local book yet.',
         );
       const { root, quality, metadata } = this.profiles(kind);
+      const { bookseerrMatch: _explanation, ...upstreamCandidate } = candidate;
       const payload = {
-        ...candidate,
+        ...upstreamCandidate,
         id: 0,
         mediaType: kind,
         monitored: true,

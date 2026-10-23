@@ -32,6 +32,87 @@ async function setup() {
     },
   };
 }
+test('upstream match review and confirmation enforce administrator access and CSRF', async (t) => {
+  const ctx = await setup();
+  try {
+    const admin = await ctx.login();
+    ctx.store.addUser({
+      username: 'matchreader',
+      displayName: 'Reader',
+      passwordHash: await hashPassword('a-reader-test-password'),
+      role: 'user',
+      autoApprove: false,
+      weeklyLimit: 1,
+    });
+    const reader = await ctx.login('matchreader', 'a-reader-test-password');
+    const request = ctx.store.createRequest(
+      book,
+      'ebook',
+      ctx.store.users().find((u) => u.role === 'admin')!,
+    );
+    const root = `/api/requests/${request.id}`;
+    t.mock.method(ctx.services, 'requestMatches', async () => ({ items: [] }));
+    const chosen: string[] = [];
+    t.mock.method(ctx.services, 'confirmRequestMatch', async (_id: string, workId: string) => {
+      chosen.push(workId);
+    });
+    assert.equal(
+      (await ctx.app.inject({ url: root + '/matches', headers: reader })).statusCode,
+      403,
+    );
+    assert.equal(
+      (
+        await ctx.app.inject({
+          method: 'POST',
+          url: root + '/match',
+          headers: reader,
+          payload: { workId: 'gr:1' },
+        })
+      ).statusCode,
+      403,
+    );
+    assert.equal(
+      (await ctx.app.inject({ url: root + '/matches', headers: admin })).statusCode,
+      200,
+    );
+    assert.equal(
+      (
+        await ctx.app.inject({
+          method: 'POST',
+          url: root + '/match',
+          headers: { cookie: admin.cookie },
+          payload: { workId: 'gr:1' },
+        })
+      ).statusCode,
+      403,
+    );
+    assert.equal(
+      (
+        await ctx.app.inject({
+          method: 'POST',
+          url: root + '/match',
+          headers: admin,
+          payload: { workId: 'https://other.test' },
+        })
+      ).statusCode,
+      400,
+    );
+    assert.equal(
+      (
+        await ctx.app.inject({
+          method: 'POST',
+          url: root + '/match',
+          headers: admin,
+          payload: { workId: 'gr:1' },
+        })
+      ).statusCode,
+      200,
+    );
+    assert.deepEqual(chosen, ['gr:1']);
+  } finally {
+    await ctx.close();
+  }
+});
 test('authentication, CSRF, roles, secret redaction, and disabled sessions are enforced at the API', async () => {
   const ctx = await setup();
   const { app, store } = ctx;

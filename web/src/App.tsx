@@ -16,7 +16,14 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import type { AppStatus, BookRequest, BookResult, Notification, User } from '../../shared/types';
+import type {
+  AppStatus,
+  BookRequest,
+  BookResult,
+  ChaptarrMatchCandidate,
+  Notification,
+  User,
+} from '../../shared/types';
 import { api, message, setCsrf, time } from './api';
 import { BookDialog, Cover } from './Books';
 import { AccountPage, ConnectionsPage, UsersPage } from './Admin';
@@ -525,6 +532,33 @@ function RequestsPage({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [reviewed, setReviewed] = useState<Record<string, boolean>>({});
+  const [matches, setMatches] = useState<Record<string, ChaptarrMatchCandidate[]>>({});
+  const [choices, setChoices] = useState<Record<string, string>>({});
+  async function reviewMatch(id: string) {
+    setBusy(id);
+    setError('');
+    try {
+      const result = await api<{ items: ChaptarrMatchCandidate[] }>(`/requests/${id}/matches`);
+      setMatches((previous) => ({ ...previous, [id]: result.items }));
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy('');
+    }
+  }
+  async function saveMatch(id: string) {
+    setBusy(id);
+    setError('');
+    try {
+      await api(`/requests/${id}/match`, 'POST', { workId: choices[id] });
+      refresh();
+      toast('Book match saved. Checking the request.');
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy('');
+    }
+  }
   const shown = requests.filter(
     (r) =>
       filter === 'all' ||
@@ -605,6 +639,63 @@ function RequestsPage({
                 {['needs_review', 'failed', 'cancelled', 'rejected'].includes(r.status) &&
                 user.role === 'admin' ? (
                   <div className="retry-controls">
+                    <button
+                      className="button small-button"
+                      disabled={busy === r.id}
+                      onClick={() => void reviewMatch(r.id)}
+                    >
+                      Review book match
+                    </button>
+                    {matches[r.id] ? (
+                      <fieldset className="candidate-list">
+                        <legend>Choose the correct book</legend>
+                        <p className="muted small">
+                          This choice is saved for this book and format. Existing downloads are
+                          checked before another search.
+                        </p>
+                        {matches[r.id].length ? (
+                          matches[r.id].map((candidate) => (
+                            <label className="candidate" key={candidate.workId}>
+                              <input
+                                type="radio"
+                                name={`book-match-${r.id}`}
+                                value={candidate.workId}
+                                checked={choices[r.id] === candidate.workId}
+                                onChange={() =>
+                                  setChoices((previous) => ({
+                                    ...previous,
+                                    [r.id]: candidate.workId,
+                                  }))
+                                }
+                              />
+                              <span>
+                                <strong>{candidate.title}</strong>
+                                <br />
+                                {candidate.author} · {candidate.provider}
+                                <br />
+                                <small>
+                                  {candidate.reason} · {candidate.workId}
+                                  {candidate.isbns.length
+                                    ? ` · ISBN ${candidate.isbns.join(', ')}`
+                                    : ''}
+                                </small>
+                              </span>
+                            </label>
+                          ))
+                        ) : (
+                          <p>
+                            No verified matching works are ready. Check the metadata in Chaptarr.
+                          </p>
+                        )}
+                        <button
+                          className="button small-button"
+                          disabled={!choices[r.id] || busy === r.id}
+                          onClick={() => void saveMatch(r.id)}
+                        >
+                          Use this match and resume
+                        </button>
+                      </fieldset>
+                    ) : null}
                     <label className="checkbox small">
                       <input
                         type="checkbox"
