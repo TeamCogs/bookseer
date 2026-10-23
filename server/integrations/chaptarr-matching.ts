@@ -54,7 +54,6 @@ export function rankChaptarrMatches(
     const title = candidate.title;
     const author = candidate.author?.authorName || candidate.author?.name || '';
     const ids = workIdentifiers(candidate);
-    const sameWork = ids.some((id) => requested.identifiers.work.includes(id));
     const pinned = Boolean(confirmedWorkId && ids.includes(confirmedWorkId));
     const sameAuthor = normalizeAuthor(author) === normalizeAuthor(requested.author);
     if (
