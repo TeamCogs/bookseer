@@ -1143,6 +1143,10 @@ select {
   margin-top: 16px;
   flex-wrap: wrap;
 }
+.retry-controls fieldset {
+  flex-basis: 100%;
+  min-width: 0;
+}
 .notification-row {
   display: flex;
   align-items: center;

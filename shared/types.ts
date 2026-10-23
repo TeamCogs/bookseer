@@ -107,6 +107,16 @@ export interface BookRequest {
   followers: number;
   following: boolean;
 }
+export interface ChaptarrMatchCandidate {
+  workId: string;
+  title: string;
+  author: string;
+  provider: string;
+  score: number;
+  reason: string;
+  isbns: string[];
+  localIds: number[];
+}
 export interface User {
   id: string;
   username: string;

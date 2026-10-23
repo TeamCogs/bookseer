@@ -551,6 +551,32 @@ export async function buildApp(
     },
   );
   app.get('/api/requests', async (req) => ({ items: store.requestsFor(req.auth!.user) }));
+  app.get<{ Params: { id: string } }>('/api/requests/:id/matches', async (req) => {
+    admin(req);
+    if (!store.request(req.params.id)) throw new AppError(404, 'Request not found.');
+    return services.requestMatches(req.params.id);
+  });
+  app.post<{ Params: { id: string }; Body: { workId: string } }>(
+    '/api/requests/:id/match',
+    {
+      schema: body({ workId: { ...text(100), pattern: '^(gr|hc|ol|gb):[A-Za-z0-9_-]+$' } }, [
+        'workId',
+      ]),
+    },
+    async (req) => {
+      admin(req);
+      if (!store.request(req.params.id)) throw new AppError(404, 'Request not found.');
+      try {
+        await services.confirmRequestMatch(req.params.id, req.body.workId, req.auth!.user);
+      } catch (error) {
+        throw new AppError(
+          409,
+          error instanceof Error ? error.message : 'Book matching changed. Review it again.',
+        );
+      }
+      return { ok: true };
+    },
+  );
   app.post<{ Body: { catalogId: string; mediaKind: MediaKind } }>(
     '/api/requests',
     { schema: body({ catalogId: text(300), mediaKind: kindSchema }, ['catalogId', 'mediaKind']) },

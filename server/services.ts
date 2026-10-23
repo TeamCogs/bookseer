@@ -1,4 +1,10 @@
-import type { LibraryItem, MediaKind, Source, User } from '../shared/types.js';
+import type {
+  ChaptarrMatchCandidate,
+  LibraryItem,
+  MediaKind,
+  Source,
+  User,
+} from '../shared/types.js';
 import type { Config, ConnectionConfig } from './config.js';
 import type { Store } from './store.js';
 import { librarySource } from '../shared/libraries.js';
@@ -6,7 +12,13 @@ import { normalizeConnections } from './library-config.js';
 import { libraryAdapter } from './integrations/libraries.js';
 import type { LibraryAdapter } from './integrations/library.js';
 import { IntegrationError } from './integrations/http.js';
-import { Chaptarr, LookupPendingError, PendingAddError } from './integrations/chaptarr.js';
+import {
+  Chaptarr,
+  LookupPendingError,
+  MatchReviewError,
+  PendingAddError,
+  queueReviewMessage,
+} from './integrations/chaptarr.js';
 import { OpenLibrary } from './integrations/openlibrary.js';
 import { bookResult } from './matching.js';
 import { decrypt, encrypt } from './security.js';
@@ -174,6 +186,70 @@ export class Services {
     await this.syncInventories();
     await this.refreshRequests();
   }
+  private matchKey(catalogId: string, kind: MediaKind) {
+    return `chaptarr_match:${this.chaptarr.fingerprint}:${catalogId}:${kind}`;
+  }
+  savedMatch(
+    catalogId: string,
+    kind: MediaKind,
+  ): (ChaptarrMatchCandidate & { confirmedBy?: string }) | undefined {
+    const value = this.store.setting(this.matchKey(catalogId, kind));
+    return value ? JSON.parse(value) : undefined;
+  }
+  async requestMatches(id: string) {
+    const request = this.store.request(id);
+    const book = request && this.store.book(String(request.catalog_id));
+    if (!request || !book) throw new Error('Request not found.');
+    const kind = request.media_kind as MediaKind;
+    const candidates = await this.chaptarr.candidates(book, kind, undefined, true);
+    return {
+      items: candidates.map((candidate) => candidate.summary),
+      saved: this.savedMatch(book.id, kind),
+    };
+  }
+  async confirmRequestMatch(id: string, workId: string, actor: User) {
+    const request = this.store.request(id);
+    const book = request && this.store.book(String(request.catalog_id));
+    if (!request || !book) throw new Error('Request not found.');
+    const eligible = ['needs_review', 'failed', 'cancelled', 'rejected'];
+    if (!eligible.includes(String(request.status)))
+      throw new Error('Only a stopped request can change its book match.');
+    const kind = request.media_kind as MediaKind;
+    const adapter = this.chaptarr;
+    const candidates = await adapter.candidates(book, kind, undefined, true);
+    if (!candidates.some((candidate) => candidate.summary.workId === workId))
+      throw new Error('Select one of the verified matching works.');
+    const selected = await adapter.lookup(book, kind, workId);
+    this.store.transaction(() => {
+      if (this.chaptarr !== adapter)
+        throw new Error('Connections changed during review. Load the matching books again.');
+      if (
+        this.store.request(id)?.updated_at !== request.updated_at ||
+        !eligible.includes(String(this.store.request(id)?.status))
+      )
+        throw new Error('The request changed during review.');
+      this.store.setSetting(
+        this.matchKey(book.id, kind),
+        JSON.stringify({
+          ...selected.bookseerrMatch,
+          confirmedBy: actor.id,
+          confirmedAt: new Date().toISOString(),
+        }),
+      );
+      this.store.setSetting(`lookup_retry:${id}`, '');
+      this.store.audit(
+        actor.id,
+        'request.match_confirmed',
+        JSON.stringify({ id, workId, reason: selected.bookseerrMatch.reason }),
+      );
+      this.store.updateRequest(
+        id,
+        'pending_setup',
+        'Book identity confirmed. Rechecking the libraries and existing download before acquisition.',
+      );
+    });
+    this.enqueue(id);
+  }
   async dispatch(id: string): Promise<void> {
     if (this.stopping || this.dispatching.has(id) || this.config.demo) return;
     const request = this.store.request(id);
@@ -244,13 +320,48 @@ export class Services {
     const generation = this.generation;
     this.dispatching.add(id);
     try {
-      const resolved = await this.chaptarr.lookup(book, kind);
+      if (request.upstream_id) {
+        const existingDownload = (await this.chaptarr.queue()).find(
+          (item) => item.bookId === request.upstream_id || item.book?.id === request.upstream_id,
+        );
+        if (
+          this.stopping ||
+          generation !== this.generation ||
+          this.store.request(id)?.status !== 'checking'
+        )
+          return;
+        if (existingDownload) {
+          const blocked =
+            existingDownload.trackedDownloadState === 'importBlocked' ||
+            ['error', 'warning'].includes(existingDownload.trackedDownloadStatus);
+          this.store.updateRequest(
+            id,
+            blocked ? 'needs_review' : 'downloading',
+            blocked
+              ? queueReviewMessage(existingDownload)
+              : 'The existing Chaptarr download is still being processed; no new search was sent.',
+          );
+          return;
+        }
+      }
+      const savedMatch = this.savedMatch(book.id, kind);
+      const resolved = await this.chaptarr.lookup(book, kind, savedMatch?.workId);
       if (
         this.stopping ||
         generation !== this.generation ||
         this.store.request(id)?.status !== 'checking'
       )
         return;
+      if (resolved.bookseerrMatch?.workId) {
+        this.store.setSetting(
+          this.matchKey(book.id, kind),
+          JSON.stringify({
+            ...resolved.bookseerrMatch,
+            confirmedBy: savedMatch?.confirmedBy,
+            resolvedAt: new Date().toISOString(),
+          }),
+        );
+      }
       if (
         typeof resolved.foreignBookId === 'string' &&
         /^(ol:|hc:|gr:|gb:)/.test(resolved.foreignBookId)
@@ -386,6 +497,8 @@ export class Services {
         'needs_review',
         `${error instanceof Error ? error.message : 'Submission could not be verified.'} Verify Chaptarr before retrying; automatic retries are disabled.`,
       );
+      if (error instanceof MatchReviewError)
+        this.store.setSetting(`match_review:${id}`, JSON.stringify(error.candidates));
     } finally {
       this.dispatching.delete(id);
     }
@@ -442,17 +555,17 @@ export class Services {
         this.enqueue(id);
         continue;
       }
-      if (latest.status === 'needs_review') continue;
       const item = queue?.find(
         (q) => q.bookId === request.upstream_id || q.book?.id === request.upstream_id,
       );
       if (!item) continue;
-      if (item.trackedDownloadStatus === 'error' || item.trackedDownloadStatus === 'warning')
-        this.store.updateRequest(
-          id,
-          'needs_review',
-          'Chaptarr reported a download or import issue. Review its queue.',
-        );
+      if (
+        item.trackedDownloadState === 'importBlocked' ||
+        item.trackedDownloadStatus === 'error' ||
+        item.trackedDownloadStatus === 'warning'
+      )
+        this.store.updateRequest(id, 'needs_review', queueReviewMessage(item));
+      else if (latest.status === 'needs_review') continue;
       else if (/import/i.test(item.trackedDownloadState || ''))
         this.store.updateRequest(id, 'importing', 'Chaptarr is processing the completed download.');
       else this.store.updateRequest(id, 'downloading', 'Downloading through Chaptarr.');

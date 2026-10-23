@@ -346,6 +346,7 @@ test('a missing unmonitored work is reused and monitored without adding another 
     const path = new URL(String(input)).pathname;
     const body = init.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ path, method: init.method || 'GET', body });
+    if (path.endsWith('/queue')) return json({ records: [], totalRecords: 0 });
     if (path.endsWith('/lookup'))
       return json([
         {
@@ -447,6 +448,7 @@ test('accepted asynchronous additions resume by finding their local instance and
   let searches = 0;
   t.mock.method(globalThis, 'fetch', async (input: string, init: RequestInit) => {
     const path = new URL(String(input)).pathname;
+    if (path.endsWith('/queue')) return json({ records: [], totalRecords: 0 });
     if (path.endsWith('/lookup'))
       return json([
         {
