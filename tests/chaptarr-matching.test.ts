@@ -187,3 +187,79 @@ test('confirmed matches persist by connection, book and format, and reject unlis
     store.close();
   }
 });
+
+test('a unique canonical lookup preserves a saved alias without waiving title or author checks', () => {
+  const input = { book: candidate('hc:2'), canonical: true, lookupWorkId: 'gr:1' };
+  const ranked = rankChaptarrMatches(requested, 'ebook', [input], 'gr:1');
+  assert.equal(uniqueChaptarrMatch(ranked, 'gr:1')?.summary.workId, 'hc:2');
+  assert.ok(ranked[0].summary.aliases?.includes('gr:1'));
+  assert.equal(
+    rankChaptarrMatches(
+      requested,
+      'ebook',
+      [{ ...input, book: candidate('hc:2', 'Unrelated Work') }],
+      'gr:1',
+    ).length,
+    0,
+  );
+  assert.equal(
+    rankChaptarrMatches(
+      requested,
+      'ebook',
+      [
+        {
+          ...input,
+          book: candidate('hc:2', undefined, { author: { authorName: 'Someone Else' } }),
+        },
+      ],
+      'gr:1',
+    ).length,
+    0,
+  );
+});
+
+test('native previews can hydrate to a different canonical provider and persist the identity actually used', async (t) => {
+  const c = config().connections;
+  Object.assign(c, {
+    chaptarrUrl: 'http://chaptarr.test',
+    chaptarrApiKey: 'key',
+    ebookRootFolder: '/ebooks',
+    ebookQualityProfileId: 1,
+    ebookMetadataProfileId: 1,
+  });
+  t.mock.method(globalThis, 'fetch', async (input: string) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith('/lookup'))
+      return json(
+        url.searchParams.get('term') === 'gr:1'
+          ? [
+              candidate('hc:2', requested.title + ': Lasting Lessons', {
+                localEbookBooks: [{ id: 9, hasFiles: false }],
+              }),
+            ]
+          : [],
+      );
+    return json(
+      url.searchParams.get('provider') === 'goodreads'
+        ? [{ book: candidate('gr:1', requested.title + ': Lasting Lessons') }]
+        : [],
+    );
+  });
+  const result = await new Chaptarr(c).lookup(requested, 'ebook');
+  assert.equal(result.foreignBookId, 'hc:2');
+  assert.equal(result.bookseerrMatch.workId, 'hc:2');
+  assert.ok(result.bookseerrMatch.aliases.includes('gr:1'));
+});
+
+test('multiple canonical results cannot claim a saved alias without unique identity evidence', async (t) => {
+  const c = config().connections;
+  Object.assign(c, {
+    chaptarrUrl: 'http://chaptarr.test',
+    chaptarrApiKey: 'key',
+    ebookRootFolder: '/ebooks',
+    ebookQualityProfileId: 1,
+    ebookMetadataProfileId: 1,
+  });
+  t.mock.method(globalThis, 'fetch', async () => json([candidate('hc:2'), candidate('hc:3')]));
+  await assert.rejects(new Chaptarr(c).lookup(requested, 'ebook', 'gr:1'), /unique matching work/);
+});

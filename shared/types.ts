@@ -109,6 +109,7 @@ export interface BookRequest {
 }
 export interface ChaptarrMatchCandidate {
   workId: string;
+  aliases?: string[];
   title: string;
   author: string;
   provider: string;
