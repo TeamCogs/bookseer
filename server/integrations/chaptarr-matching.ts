@@ -7,7 +7,7 @@ import {
   normalizeText,
 } from '../matching.js';
 
-export type MatchInput = { book: Record<string, any>; canonical?: boolean };
+export type MatchInput = { book: Record<string, any>; canonical?: boolean; lookupWorkId?: string };
 export type RankedMatch = { book: Record<string, any>; summary: ChaptarrMatchCandidate };
 const workId = /^(ol:|hc:|gr:|gb:)/;
 
@@ -54,7 +54,10 @@ export function rankChaptarrMatches(
     const title = candidate.title;
     const author = candidate.author?.authorName || candidate.author?.name || '';
     const ids = workIdentifiers(candidate);
-    const pinned = Boolean(confirmedWorkId && ids.includes(confirmedWorkId));
+    const aliases = input.canonical && input.lookupWorkId ? [input.lookupWorkId] : [];
+    const pinned = Boolean(
+      confirmedWorkId && (ids.includes(confirmedWorkId) || aliases.includes(confirmedWorkId)),
+    );
     const sameAuthor = normalizeAuthor(author) === normalizeAuthor(requested.author);
     if (
       !normalizeAuthor(requested.author) ||
@@ -113,6 +116,7 @@ export function rankChaptarrMatches(
       book: candidate,
       summary: {
         workId: foreignId,
+        aliases: [...new Set([...ids.filter((id) => id !== foreignId), ...aliases])],
         title,
         author,
         provider,
@@ -142,7 +146,12 @@ export function uniqueChaptarrMatch(
   matches: RankedMatch[],
   confirmedWorkId?: string,
 ): RankedMatch | undefined {
-  if (confirmedWorkId) return matches.find((m) => m.summary.workId === confirmedWorkId);
+  if (confirmedWorkId) {
+    const matching = matches.filter(
+      (m) => m.summary.workId === confirmedWorkId || m.summary.aliases?.includes(confirmedWorkId),
+    );
+    return matching.length === 1 ? matching[0] : undefined;
+  }
   return matches.length &&
     (matches.length === 1 || matches[0].summary.score > matches[1].summary.score)
     ? matches[0]

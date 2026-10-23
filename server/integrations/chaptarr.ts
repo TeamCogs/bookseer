@@ -188,7 +188,12 @@ export class Chaptarr {
     );
     const inputs: MatchInput[] = found
       .filter((candidate) => !candidate.mediaType || candidate.mediaType === kind)
-      .map((candidate) => ({ book: candidate, canonical: /^(ol:|hc:|gr:|gb:)/.test(lookupTerm) }));
+      .map((candidate) => ({
+        book: candidate,
+        canonical: /^(ol:|hc:|gr:|gb:)/.test(lookupTerm),
+        lookupWorkId:
+          found.length === 1 && /^(ol:|hc:|gr:|gb:)/.test(lookupTerm) ? lookupTerm : undefined,
+      }));
     let ranked = rankChaptarrMatches(book, kind, inputs, confirmedWorkId);
     const direct = uniqueChaptarrMatch(ranked, confirmedWorkId);
     if (direct && direct.summary.score >= 800 && !includeAlternatives) return ranked;
@@ -233,6 +238,7 @@ export class Chaptarr {
       throw new MatchReviewError(ranked.map((m) => m.summary));
     }
     let candidate = selected.book;
+    let explanation = selected.summary;
     // Search previews may use an audiobook placeholder. Hydrate the chosen identity for this format.
     if (
       candidate.foreignBookId &&
@@ -249,15 +255,32 @@ export class Chaptarr {
           kind,
           resolved
             .filter((b) => !b.mediaType || b.mediaType === kind)
-            .map((b) => ({ book: b, canonical: true })),
+            .map((b) => ({
+              book: b,
+              canonical: true,
+              lookupWorkId: resolved.length === 1 ? candidate.foreignBookId : undefined,
+            })),
           candidate.foreignBookId,
         ),
         candidate.foreignBookId,
       );
       if (resolved.length && !hydrated) throw new MatchReviewError(ranked.map((m) => m.summary));
-      if (hydrated) candidate = hydrated.book;
+      if (hydrated) {
+        candidate = hydrated.book;
+        explanation = {
+          ...hydrated.summary,
+          aliases: [
+            ...new Set([
+              selected.summary.workId,
+              ...(selected.summary.aliases || []),
+              ...(hydrated.summary.aliases || []),
+            ]),
+          ],
+          reason: selected.summary.reason + '; canonical identity verified by Chaptarr',
+        };
+      }
     }
-    return { ...candidate, bookseerrMatch: selected.summary };
+    return { ...candidate, bookseerrMatch: explanation };
   }
   async submit(
     book: CatalogBook,
